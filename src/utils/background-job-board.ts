@@ -183,7 +183,10 @@ export class BackgroundJobBoard {
     return this.list(parentSessionID).some((job) => job.terminalUnreconciled);
   }
 
-  formatForPrompt(parentSessionID: string, now = Date.now()): string | undefined {
+  formatForPrompt(
+    parentSessionID: string,
+    now = Date.now(),
+  ): string | undefined {
     const jobs = this.list(parentSessionID).filter(
       (job) => job.state === 'running' || job.terminalUnreconciled,
     );
@@ -223,7 +226,7 @@ function formatJob(job: BackgroundJobRecord, now = Date.now()): string {
   const isResume = job.lastLaunchedAt !== job.launchedAt;
   const ageLabel =
     job.state === 'running' && ageMs < 30_000
-      ? ` [${isResume ? 'resumed' : 'just launched'}, ${Math.round(ageMs / 1000)}s ago]`
+      ? ` [${isResume ? 'resumed' : 'just launched'}, ${Math.floor(ageMs / 1000)}s ago]`
       : '';
   const status = job.terminalUnreconciled
     ? `${job.state}, unreconciled`

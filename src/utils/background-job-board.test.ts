@@ -165,6 +165,7 @@ describe('BackgroundJobBoard', () => {
       terminalUnreconciled: false,
       completedAt: undefined,
       resultSummary: undefined,
+      launchedAt: 100,
       lastLaunchedAt: 300,
       updatedAt: 300,
     });
