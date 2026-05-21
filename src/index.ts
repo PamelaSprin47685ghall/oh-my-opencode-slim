@@ -19,6 +19,7 @@ import { createDivoomManager } from './divoom/manager';
 import {
   createApplyPatchHook,
   createAutoUpdateCheckerHook,
+  createCapitalsContextHook,
   createChatHeadersHook,
   createDelegateTaskRetryHook,
   createFilterAvailableSkillsHook,
@@ -141,6 +142,7 @@ const OhMyOpenCodeLite: Plugin = async (ctx) => {
   let foregroundFallback: ForegroundFallbackManager;
   let todoContinuationHook: ReturnType<typeof createTodoContinuationHook>;
   let sessionGoalHook: ReturnType<typeof createSessionGoalHook>;
+  let capitalsContextHook: ReturnType<typeof createCapitalsContextHook>;
   let taskSessionManagerHook: ReturnType<typeof createTaskSessionManagerHook>;
   let interviewManager: ReturnType<typeof createInterviewManager>;
   let presetManager: ReturnType<typeof createPresetManager>;
@@ -314,6 +316,7 @@ const OhMyOpenCodeLite: Plugin = async (ctx) => {
     sessionGoalHook = createSessionGoalHook(ctx, config, {
       getAgentName: (sessionID) => sessionAgentMap.get(sessionID),
     });
+    capitalsContextHook = createCapitalsContextHook(ctx.directory);
     taskSessionManagerHook = createTaskSessionManagerHook(ctx, {
       maxSessionsPerAgent: config.sessionManager?.maxSessionsPerAgent ?? 2,
       readContextMinLines: config.sessionManager?.readContextMinLines ?? 10,
@@ -1068,6 +1071,7 @@ const OhMyOpenCodeLite: Plugin = async (ctx) => {
       }
 
       sessionGoalHook.handleSystemTransform(input, output);
+      capitalsContextHook.handleSystemTransform(input, output);
 
       // Collapse to single system message for provider compatibility.
       // Some providers (e.g. Qwen via VLLM/DashScope) reject multiple

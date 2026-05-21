@@ -1,3 +1,4 @@
+export { createCapitalsContextHook } from '../capitals-context';
 export { createApplyPatchHook } from './apply-patch';
 export type { AutoUpdateCheckerOptions } from './auto-update-checker';
 export { createAutoUpdateCheckerHook } from './auto-update-checker';
