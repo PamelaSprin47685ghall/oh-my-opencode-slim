@@ -13,6 +13,9 @@ export const SUBAGENT_NAMES = [
   'observer',
   'council',
   'councillor',
+  'squad_planner',
+  'squad_reviewer',
+  'squad_executor',
 ] as const;
 
 export const ORCHESTRATOR_NAME = 'orchestrator' as const;
@@ -38,6 +41,9 @@ export const ORCHESTRATABLE_AGENTS = [
   'fixer',
   'observer',
   'council',
+  'squad_planner',
+  'squad_reviewer',
+  'squad_executor',
 ] as const;
 
 /** Agents that cannot be disabled even if listed in disabled_agents config. */
@@ -63,6 +69,9 @@ export const SUBAGENT_DELEGATION_RULES: Record<AgentName, readonly string[]> = {
   observer: [],
   council: [],
   councillor: [],
+  squad_planner: [],
+  squad_reviewer: [],
+  squad_executor: [],
 };
 
 // Default models for each agent
@@ -77,6 +86,9 @@ export const DEFAULT_MODELS: Record<AgentName, string | undefined> = {
   observer: 'openai/gpt-5.4-mini',
   council: 'openai/gpt-5.4-mini',
   councillor: 'openai/gpt-5.4-mini',
+  squad_planner: 'openai/gpt-5.4-mini',
+  squad_reviewer: 'openai/gpt-5.5',
+  squad_executor: 'openai/gpt-5.4-mini',
 };
 
 // Polling configuration

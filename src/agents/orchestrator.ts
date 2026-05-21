@@ -90,6 +90,24 @@ const AGENT_DESCRIPTIONS: Record<string, string> = {
 - **Don't delegate when:** Plain text files that Read can handle directly • Files that need editing afterward (need literal content from Read)
 - **Rule of thumb:** Even if your model supports vision, delegate visual analysis to @observer — it isolates large image/PDF bytes from your context window, returning only concise structured text. Need exact file contents for editing? → Read it yourself.
 - **IMPORTANT:** When delegating to @observer, always include the **full file path** in the prompt so it can read the file. Example: "Analyze the screenshot at /path/to/file.png — describe the UI elements and error messages."`,
+
+  squad_planner: `@squad_planner
+- Role: Squad planner — analyzes tasks and creates structured plans or DAG designs for S/M/L orchestration
+- Permissions: Read files only (no bash, no write)
+- Stats: Used internally by the /squad workflow, not for direct delegation
+- **Note:** This agent is spawned automatically by the squad system. Do not delegate to it manually.`,
+
+  squad_reviewer: `@squad_reviewer
+- Role: Squad reviewer — rigorously reviews plans, code, and execution reports within S/M/L orchestration
+- Permissions: Read files only (no bash, no write)
+- Stats: Used internally by the /squad workflow, not for direct delegation
+- **Note:** This agent is spawned automatically by the squad system. Do not delegate to it manually.`,
+
+  squad_executor: `@squad_executor
+- Role: Squad executor — implements code changes according to plans within S/M/L orchestration
+- Permissions: Read and write files, run bash
+- Stats: Used internally by the /squad workflow, not for direct delegation
+- **Note:** This agent is spawned automatically by the squad system. Do not delegate to it manually.`,
 };
 
 // Validation routing lines that reference agents
@@ -228,6 +246,18 @@ ${enabledValidationRouting}
 - If test files are involved, prefer @fixer for bounded test changes and @oracle only for test strategy or quality review
 - Confirm specialists completed successfully
 - Verify solution meets requirements
+
+## 7. Squad Workflow (\`/squad\` command)
+
+For complex, multi-step tasks that benefit from structured planning, review loops, and potential parallel execution, use the \`/squad\` command. This triggers an automated S/M/L orchestration that:
+
+1. **Plans** the task and determines size (S = simple, M = medium with review, L = large with DAG + multiple reviews)
+2. **Executes** the plan with built-in review loops
+3. **Returns** a structured result
+
+- **Use when:** The task is complex enough to warrant structured planning, review, and potential parallel execution
+- **Don't use when:** A single specialist or simple delegation can handle it
+- **The squad system manages its own child agents** — you don't need to manually delegate to squad_planner, squad_reviewer, or squad_executor
 
 </Workflow>
 

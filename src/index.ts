@@ -44,6 +44,8 @@ import {
   createCouncilTool,
   createPresetManager,
   createReadSessionTool,
+  createSquadReportTools,
+  createSquadTool,
   createSubtaskCommandManager,
   createSubtaskState,
   createSubtaskTool,
@@ -331,7 +333,8 @@ const OhMyOpenCodeLite: Plugin = async (ctx) => {
       Object.keys(todoContinuationHook.tool).length +
       1 + // webfetch
       2 + // ast_grep_search, ast_grep_replace
-      2; // subtask, read_session
+      2 + // subtask, read_session
+      6; // squad + 5 report tools
   } catch (err) {
     // Plugin init failed: log visibly before re-throwing so the user
     // sees something actionable instead of a silent "loaded but empty".
@@ -403,6 +406,8 @@ const OhMyOpenCodeLite: Plugin = async (ctx) => {
       ast_grep_replace,
       subtask: createSubtaskTool(ctx, subtaskState, depthTracker),
       read_session: createReadSessionTool(ctx.client, subtaskState),
+      squad: createSquadTool(ctx),
+      ...createSquadReportTools(),
     },
 
     mcp: mcps,
@@ -740,6 +745,22 @@ const OhMyOpenCodeLite: Plugin = async (ctx) => {
       sessionGoalHook.registerCommand(opencodeConfig);
       presetManager.registerCommand(opencodeConfig);
       subtaskCommandManager.registerCommand(opencodeConfig);
+
+      // Register /squad command for S/M/L orchestration
+      if (!configCommand?.squad) {
+        (opencodeConfig.command as Record<string, unknown>).squad = {
+          template: [
+            'Call the squad tool with a detailed description of the task.',
+            '',
+            'Example: squad({ intent: "Refactor the auth module to use JWT" })',
+            '',
+            'The squad system will automatically determine task size (S/M/L),',
+            'create a plan, and execute with built-in review loops.',
+          ].join('\n'),
+          description:
+            'Execute a self-orchestrated S/M/L squad workflow for complex multi-step tasks',
+        };
+      }
     },
 
     event: async (input) => {

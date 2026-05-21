@@ -13,7 +13,11 @@ import {
   SUBAGENT_NAMES,
 } from '../config';
 import { getAgentMcpList } from '../config/agent-mcps';
-
+import {
+  createSquadExecutorAgent,
+  createSquadPlannerAgent,
+  createSquadReviewerAgent,
+} from '../squad/agents';
 import { createCouncilAgent } from './council';
 import { createCouncillorAgent } from './councillor';
 import { createDesignerAgent } from './designer';
@@ -211,6 +215,9 @@ const SUBAGENT_FACTORIES: Record<SubagentName, AgentFactory> = {
   observer: createObserverAgent,
   council: createCouncilAgent,
   councillor: createCouncillorAgent,
+  squad_planner: createSquadPlannerAgent,
+  squad_reviewer: createSquadReviewerAgent,
+  squad_executor: createSquadExecutorAgent,
 };
 
 // Public API
