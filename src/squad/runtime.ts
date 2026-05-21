@@ -1,7 +1,14 @@
 import type { PluginInput } from '@opencode-ai/plugin';
 import { readAffectedFiles } from './fs-utils';
-import type { ReviewReport, SquadReport } from './schemas';
-import { Deferred, type SquadSession, squadSessions } from './squad-context';
+import { renderNudgePrompt } from './prompts';
+import type { ReviewReport, SquadReport, SquadStage } from './schemas';
+import {
+  DEFAULT_NUDGE_CONFIG,
+  Deferred,
+  type NudgeConfig,
+  type SquadSession,
+  squadSessions,
+} from './squad-context';
 
 type OpencodeClient = PluginInput['client'];
 
@@ -28,6 +35,7 @@ export interface SquadRuntime {
   workspaceId: string;
   cwd: string;
   isAborted: () => boolean;
+  isNudgeExhausted: (childId: string) => boolean;
   createChild: (params: StageExecutionParams) => Promise<string>;
   awaitReport: <T extends SquadReport>(childId: string) => Promise<T>;
   executeFresh: (params: StageExecutionParams) => Promise<SquadReport>;
@@ -116,6 +124,57 @@ function stageAgent(
   }
 }
 
+/**
+ * Create a default report for a stage when the child session
+ * ends silently without calling its report tool (exhausted nudges).
+ *
+ * These reports are intentionally minimal — they carry enough data
+ * to satisfy the schema so downstream orchestration doesn't crash,
+ * but clearly signal that no real work was produced.
+ */
+function makeDefaultReport(
+  stage: SquadStage,
+  childSessionId: string,
+): SquadReport {
+  switch (stage) {
+    case 'global_plan':
+      return {
+        kind: 'global_plan',
+        childTaskId: childSessionId,
+        size: 'S',
+        planMarkdown:
+          '(No plan was submitted — the child session ended without calling the report tool.)',
+      };
+    case 'review':
+      return {
+        kind: 'review',
+        feedbackMarkdown:
+          'Review skipped: child session ended without calling the report tool.',
+      };
+    case 'dag_design':
+      return {
+        kind: 'dag_design',
+        nodes: [{ name: 'default-node' }],
+        edges: [],
+      };
+    case 'node_plan':
+      return {
+        kind: 'node_plan',
+        childTaskId: childSessionId,
+        planMarkdown:
+          '(No plan was submitted — the child session ended without calling the report tool.)',
+      };
+    case 'node_exec':
+      return {
+        kind: 'node_exec',
+        childTaskId: childSessionId,
+        reportMarkdown:
+          '(No report was submitted — the child session ended without calling the report tool.)',
+        affectedFiles: [],
+      };
+  }
+}
+
 export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
   const children = new Map<string, SquadSession>();
 
@@ -143,6 +202,14 @@ export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
       throw new Error('Squad child session did not return an id');
     }
 
+    // A Deferred that resolves when the child session finishes
+    // (whether or not it called the report tool). Used to detect
+    // silent endings for the nudge mechanism.
+    let promptResolve: () => void;
+    const promptPromise = new Promise<void>((resolve) => {
+      promptResolve = resolve;
+    });
+
     // Register session in squadSessions before prompting so the
     // report tool can find it when the child calls it.
     const ctx: SquadSession = {
@@ -152,6 +219,22 @@ export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
       structuredStore: deps.structuredStore,
       nodeName: params.nodeName,
       nextReport: new Deferred<void>(),
+      promptPromise,
+      resetPromptPromise: () => {
+        // After a nudge, replace promptPromise with a fresh never-resolving
+        // promise. The nudge prompt itself is a new session.prompt() call;
+        // when it completes, we replace again. This way, the
+        // awaitReportInternal race can detect the next silent ending.
+        let newResolve: () => void;
+        const newPromise = new Promise<void>((r) => {
+          newResolve = r;
+        });
+        ctx.promptPromise = newPromise;
+        ctx.resetPromptPromise = () => {
+          newResolve?.();
+        };
+      },
+      nudgeCount: 0,
     };
     squadSessions.set(childSessionId, ctx);
     children.set(childSessionId, ctx);
@@ -159,8 +242,10 @@ export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
 
     // Fire prompt — do NOT await it; the child runs in the background.
     // The gate mechanism (nextReport + gate) is our synchronization point.
-    try {
-      await deps.client.session.prompt({
+    // When prompt finishes, resolve promptPromise so awaitReportInternal
+    // can detect a silent ending.
+    deps.client.session
+      .prompt({
         responseStyle: 'data',
         throwOnError: true,
         query: { directory: deps.directory },
@@ -170,34 +255,103 @@ export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
           parts: [{ type: 'text', text: params.prompt }],
           tools,
         },
+      })
+      .then(() => {
+        promptResolve?.();
+      })
+      .catch(() => {
+        promptResolve?.();
       });
-    } catch (err) {
-      // If prompt fails immediately, clean up
-      ctx.disposed = true;
-      squadSessions.delete(childSessionId);
-      children.delete(childSessionId);
-      deps.createdChildIds.delete(childSessionId);
-      throw err;
-    }
 
     return childSessionId;
   }
 
+  /**
+   * Await a report from a child session, with nudge logic.
+   *
+   * If the child finishes (promptPromise resolves) without calling
+   * its report tool (nextReport not resolved), we nudge it by
+   * sending a reminder prompt. After maxNudges nudges without a
+   * response, we create a default report and continue.
+   */
   async function awaitReportInternal<T extends SquadReport>(
     childId: string,
   ): Promise<T> {
     const ctx = children.get(childId);
     if (!ctx) throw new Error(`No context for ${childId}`);
 
-    // Wait for the child's report tool to resolve nextReport
-    await ctx.nextReport.promise;
+    const nudgeConfig: NudgeConfig = ctx.nudgeConfig ?? DEFAULT_NUDGE_CONFIG;
+    const maxNudges = nudgeConfig.maxNudges;
 
-    // Reset nextReport for potential retry (gate reject → child resubmits)
-    ctx.nextReport = new Deferred<void>();
+    while (true) {
+      if (runtime.isAborted()) {
+        throw new Error(`Squad aborted`);
+      }
 
-    const report = deps.structuredStore.get(childId);
-    if (!report) throw new Error(`No report from ${ctx.stage} (${childId})`);
-    return report as T;
+      // Race: which resolves first?
+      // - nextReport.promise → child called the report tool (success)
+      // - promptPromise     → child ended without calling it (nudge)
+      const report = await Promise.race([
+        ctx.nextReport.promise.then(() => {
+          const report = deps.structuredStore.get(childId);
+          return { type: 'report' as const, report };
+        }),
+        (ctx.promptPromise ?? new Promise<never>(() => {})).then(() => {
+          return { type: 'silent_end' as const };
+        }),
+      ]);
+
+      if (report.type === 'report') {
+        // Child submitted a report — reset nextReport for potential retry
+        ctx.nextReport = new Deferred<void>();
+        if (!report.report) {
+          throw new Error(`No report from ${ctx.stage} (${childId})`);
+        }
+        return report.report as T;
+      }
+
+      // Silent ending — child finished without calling report tool
+      if (ctx.nudgeCount >= maxNudges) {
+        // Exhausted all nudges — create a default report and continue.
+        // Mark as exhausted so callers skip review (child is dead, can't revise).
+        const defaultReport = makeDefaultReport(ctx.stage, childId);
+        ctx.structuredStore.set(childId, defaultReport);
+        ctx.nudgeExhausted = true;
+        ctx.nextReport.resolve();
+        // After resolving nextReport, the gate flow will proceed normally.
+        // Reset nextReport for potential retry (gate reject → child resubmits)
+        ctx.nextReport = new Deferred<void>();
+        return defaultReport as T;
+      }
+
+      // Send nudge — increment counter and fire a new prompt
+      ctx.nudgeCount++;
+      const nudgeText = renderNudgePrompt(ctx.stage, ctx.nudgeCount, maxNudges);
+
+      // Replace promptPromise with a new one for the nudge prompt.
+      // This allows detecting if the nudge itself also ends silently.
+      ctx.resetPromptPromise?.();
+
+      // Fire the nudge prompt (noReply = false so the agent continues)
+      deps.client.session
+        .prompt({
+          responseStyle: 'data',
+          throwOnError: true,
+          query: { directory: deps.directory },
+          path: { id: childId },
+          body: {
+            parts: [{ type: 'text', text: nudgeText }],
+          },
+        })
+        .then(() => {
+          // Nudge prompt finished — if resetPromptPromise exists, call it
+          // so the race in the next iteration of this loop can detect it.
+          ctx.resetPromptPromise?.();
+        })
+        .catch(() => {
+          ctx.resetPromptPromise?.();
+        });
+    }
   }
 
   async function executeFreshInternal(
@@ -205,17 +359,13 @@ export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
   ): Promise<SquadReport> {
     const childId = await createChild(params);
     try {
+      const report = await runtime.awaitReport<SquadReport>(childId);
+
       const ctx = children.get(childId);
-      if (!ctx) throw new Error(`No session context for child ${childId}`);
-
-      // Wait for report
-      await ctx.nextReport.promise;
-      const report = deps.structuredStore.get(childId);
-      if (!report)
-        throw new Error(`No report from ${params.stage} (${childId})`);
-
-      // Accept immediately — fresh stages don't need review loops
-      ctx.gate?.resolve({ accepted: true });
+      if (ctx) {
+        // Accept immediately — fresh stages don't need review loops
+        ctx.gate?.resolve({ accepted: true });
+      }
 
       return report;
     } catch (err) {
@@ -283,6 +433,10 @@ export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
     workspaceId: deps.parentSessionId,
     cwd: deps.directory,
     isAborted: () => !!deps.abortSignal?.aborted,
+    isNudgeExhausted: (childId: string) => {
+      const ctx = children.get(childId);
+      return ctx?.nudgeExhausted === true;
+    },
     createChild,
     awaitReport: awaitReportInternal,
     executeFresh: executeFreshInternal,
@@ -323,6 +477,15 @@ export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
         }
 
         const report = await runtime.awaitReport<TReport>(childId);
+
+        // If nudge was exhausted, the child is dead and can't revise —
+        // skip review and accept immediately.
+        const ctx = children.get(childId);
+        if (ctx?.nudgeExhausted) {
+          runtime.gateAccept(childId);
+          await runtime.cleanupChild(childId);
+          return report;
+        }
 
         // Read affected files before building review prompt
         let fileContentsContext = '(无受影响文件)';

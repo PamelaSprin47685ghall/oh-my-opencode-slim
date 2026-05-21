@@ -74,6 +74,18 @@ export async function runSquad(params: SquadParams): Promise<SquadResult> {
           await runtime.awaitReport<GlobalPlanReport>(planChildId);
         const { size, planMarkdown } = planReport;
 
+        // If the plan child exhausted nudges, the child is dead and
+        // cannot revise. Accept and move on without review.
+        if (runtime.isNudgeExhausted(planChildId)) {
+          runtime.gateAccept(planChildId);
+          await runtime.cleanupChild(planChildId);
+          return {
+            taskId: runtime.workspaceId,
+            reportMarkdown: planReport.planMarkdown,
+            status: 'completed' as const,
+          };
+        }
+
         // S: no review — gate hangs during execution, released after
         if (size === 'S') {
           try {

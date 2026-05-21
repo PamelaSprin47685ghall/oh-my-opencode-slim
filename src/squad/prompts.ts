@@ -285,6 +285,48 @@ export function renderExecRejectionFeedback(feedbackMarkdown: string): string {
   return `你制定的计划执行后，评审拒绝结束整个任务。请以现在的状态为基准，重新制定走向最终目标的计划。\n\n# 执行评审反馈\n\n${feedbackMarkdown}`;
 }
 
+const STAGE_TOOL_MAP: Record<string, string> = {
+  global_plan:
+    'squad_global_plan({ "size": "S"|"M"|"L", "planMarkdown": "..." })',
+  review: 'squad_review({ "feedbackMarkdown": null })',
+  dag_design: 'squad_dag_design({ "nodes": [...], "edges": [...] })',
+  node_plan: 'squad_node_plan({ "planMarkdown": "..." })',
+  node_exec:
+    'squad_node_exec({ "reportMarkdown": "...", "affectedFiles": [...] })',
+};
+
+const NUDGE_HEADER = '⚠️ 你还没有提交报告。';
+
+/**
+ * 渲染 nudge 提示，发送给未调用阶段专属报告工具就静默结束的子会话。
+ * 提醒子会话通过正确的工具提交报告。
+ */
+export function renderNudgePrompt(
+  stage: string,
+  nudgeCount: number,
+  maxNudges: number,
+): string {
+  const toolCall = STAGE_TOOL_MAP[stage] ?? '阶段专属报告工具';
+  const remaining = maxNudges - nudgeCount;
+
+  const urgency =
+    remaining > 0
+      ? `如果再收到 ${remaining} 次提醒后仍不提交，将自动使用空报告代替。`
+      : '这是最后一次提醒。如果仍不提交，将自动使用空报告代替。';
+
+  return [
+    `${NUDGE_HEADER} 这是第 ${nudgeCount}/${maxNudges} 次提醒。`,
+    '',
+    '你必须调用阶段专属报告工具来提交结果：',
+    '',
+    `  ${toolCall}`,
+    '',
+    urgency,
+    '',
+    '不要解释你要做什么——立即调用工具。',
+  ].join('\n');
+}
+
 export function renderEndReviewPrompt(
   planMarkdown: string,
   nodeReports: Array<{

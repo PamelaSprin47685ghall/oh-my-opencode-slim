@@ -31,6 +31,17 @@ export type GateVerdict =
   | { accepted: true }
   | { accepted: false; feedback: string };
 
+/** Nudge configuration for squad child sessions. */
+export interface NudgeConfig {
+  /** Maximum number of nudges before giving up and using a default report. Default: 3. */
+  maxNudges: number;
+}
+
+/** Default nudge configuration. */
+export const DEFAULT_NUDGE_CONFIG: NudgeConfig = {
+  maxNudges: 3,
+};
+
 /**
  * SquadSession — per-child-session state shared between the orchestrator
  * (which awaits the report) and the report tool (which resolves it).
@@ -52,6 +63,27 @@ export interface SquadSession {
     resolve: (verdict: GateVerdict) => void;
   };
   disposed?: boolean;
+  /**
+   * The promise returned by client.session.prompt() for this child.
+   * Resolves when the child session finishes (either with or without
+   * calling the report tool). Used to detect silent endings.
+   */
+  promptPromise?: Promise<void>;
+  /**
+   * Replace promptPromise with a new never-resolving promise after a
+   * nudge, so we can detect the next silent ending.
+   */
+  resetPromptPromise?: () => void;
+  /** Number of nudges sent so far. Incremented on each nudge, checked against maxNudges. */
+  nudgeCount: number;
+  /** Nudge config for this session. Falls back to DEFAULT_NUDGE_CONFIG. */
+  nudgeConfig?: NudgeConfig;
+  /**
+   * Set to true when nudgeCount >= maxNudges and a default report was used.
+   * Callers (e.g. withReviewLoop) should skip review for exhausted sessions
+   * because the child is dead and cannot revise.
+   */
+  nudgeExhausted?: boolean;
 }
 
 /**

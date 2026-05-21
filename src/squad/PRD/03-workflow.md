@@ -15,8 +15,8 @@ parent createChild(...)
   │
   ├─ squadSessions.set(childSessionId, ctx)  ← L: 预注册
   │
-  ├─ client.session.prompt({ ..., tools })   ← 只启用当前阶段的报告工具
-  │                                            （K: LLM 只看到需要的 schema）
+  ├─ client.session.prompt({ ..., tools })   ← 只启用当前阶段的报告工具（K）
+  │                                            （不 await，promptPromise 追踪静默结束）
   │
   ├─ child 调用阶段专属报告工具
   │    ├─ 找不到 ctx → 返回错误字符串（L: fail closed）
@@ -26,10 +26,16 @@ parent createChild(...)
   │         ├─ nextReport.resolve()
   │         └─ 进入 gateWait
   │
+  ├─ [promptPromise 先 resolve？] ← N: 检测静默结束
+  │    ├─ nudgeCount < maxNudges → 发送 nudge 提醒，nudgeCount++，重试
+  │    └─ nudgeCount >= maxNudges → makeDefaultReport() → 写入 structuredStore → 继续流程
+  │
   └─ gateWait 后才进入 accept/reject 二态
 ```
 
 图中「报告工具 → gate hang」的边隐含上面的 pre-gate 流程。只有 pre-gate 成功后，后续 accept/reject 推导才成立。
+
+静默结束检测（原理 N）：`awaitReportInternal` 通过 `Promise.race` 竞争 `nextReport` 和 `promptPromise`。如果 `promptPromise` 先 resolve，说明子会话结束了但没调用报告工具，此时触发 nudge 机制。
 
 ---
 
