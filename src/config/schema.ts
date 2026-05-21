@@ -9,6 +9,9 @@ const FALLBACK_AGENT_NAMES = [
   'explorer',
   'librarian',
   'fixer',
+  'squad_planner',
+  'squad_reviewer',
+  'squad_executor',
 ] as const;
 
 const MANUAL_AGENT_NAMES = [
@@ -18,6 +21,9 @@ const MANUAL_AGENT_NAMES = [
   'explorer',
   'librarian',
   'fixer',
+  'squad_planner',
+  'squad_reviewer',
+  'squad_executor',
 ] as const;
 
 export const ProviderModelIdSchema = z
@@ -57,6 +63,9 @@ export const ManualPlanSchema = z
     explorer: ManualAgentPlanSchema,
     librarian: ManualAgentPlanSchema,
     fixer: ManualAgentPlanSchema,
+    squad_planner: ManualAgentPlanSchema,
+    squad_reviewer: ManualAgentPlanSchema,
+    squad_executor: ManualAgentPlanSchema,
   })
   .strict();
 
@@ -74,6 +83,9 @@ const FallbackChainsSchema = z
     explorer: AgentModelChainSchema.optional(),
     librarian: AgentModelChainSchema.optional(),
     fixer: AgentModelChainSchema.optional(),
+    squad_planner: AgentModelChainSchema.optional(),
+    squad_reviewer: AgentModelChainSchema.optional(),
+    squad_executor: AgentModelChainSchema.optional(),
   })
   .catchall(AgentModelChainSchema);
 
