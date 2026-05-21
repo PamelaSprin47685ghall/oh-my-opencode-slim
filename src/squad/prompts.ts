@@ -1,8 +1,8 @@
 const AUTO_MODE_HEADER = `你正在全自动模式下工作。请注意，你无需输出大段文本内容，因为全自动模式根本没有人阅读。
 `;
 
-const SIZE_TABLE = `- **S** — 简单任务，单文件修改，直截了当的操作
-- **M** — 中等任务，需要代码评审，但不需要并行开发
+const SIZE_TABLE = `- **S** — 简单任务，直截了当的操作
+- **M** — 中等任务，需要代码评审，例如单文件简单修改，不需要并行开发
 - **L** — 大型任务，需要代码评审，并行开发加速`;
 
 const PLAN_REVIEW_CRITERIA = `# 评估标准
@@ -25,7 +25,7 @@ const EXEC_REVIEW_CRITERIA = `# 评估标准
 
 const REVIEW_VERDICT = `# 提交裁定
 
-squad_review({ "feedbackMarkdown": null })  // 表示评审通过
+squad_review({ "feedbackMarkdown": null })  // 表示评审通过，注意：如果评审通过，反馈内容必须为 null，不能是赞扬或者其他任何文本，否则会被误认为是评审拒绝的反馈内容
 squad_review({ "feedbackMarkdown": "具体的修改意见" })  // 拒绝`;
 
 const AFFECTED_FILES_SUBMISSION = `# 提交报告
