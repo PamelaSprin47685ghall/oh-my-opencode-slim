@@ -368,6 +368,15 @@ export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
       if (ctx) {
         // Accept immediately — fresh stages don't need review loops
         ctx.gate?.resolve({ accepted: true });
+
+        // Wait for the child session to finish naturally before cleanup.
+        // When the gate resolves (accept), the child receives the verdict
+        // and may still be generating a closing response. Awaiting
+        // promptPromise ensures stream output, state updates, and
+        // network connections are fully settled before we abort the
+        // session — eliminating the race between cleanup and in-flight
+        // output.
+        await ctx.promptPromise?.catch(() => {});
       }
 
       return report;
@@ -486,6 +495,7 @@ export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
         const ctx = children.get(childId);
         if (ctx?.nudgeExhausted) {
           runtime.gateAccept(childId);
+          await ctx.promptPromise?.catch(() => {});
           await runtime.cleanupChild(childId);
           return report;
         }
@@ -526,6 +536,14 @@ export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
         }
 
         runtime.gateAccept(childId);
+
+        // Wait for the child session to finish naturally before cleanup.
+        // After gateAccept, the child receives the acceptance verdict and
+        // may still be generating output. Awaiting promptPromise ensures
+        // all in-flight output is fully settled before session abort.
+        const acceptCtx = children.get(childId);
+        await acceptCtx?.promptPromise?.catch(() => {});
+
         await runtime.cleanupChild(childId);
         return report;
       }
