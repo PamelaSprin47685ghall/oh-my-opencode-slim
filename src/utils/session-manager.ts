@@ -47,6 +47,12 @@ function aliasPrefix(agentType: AgentName): string {
       return 'clr';
     case 'orchestrator':
       return 'orc';
+    case 'squad_planner':
+      return 'sqp';
+    case 'squad_reviewer':
+      return 'sqr';
+    case 'squad_executor':
+      return 'sqe';
   }
 }
 

@@ -83,6 +83,9 @@ wheels/
 *.egg
 captures/
 
+# Ollama API key
+src/ollama-web/key.ts
+
 # BEGIN oh-my-opencode-slim clonedeps
 .slim/clonedeps/repos/
 # END oh-my-opencode-slim clonedeps

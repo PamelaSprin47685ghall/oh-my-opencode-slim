@@ -28,6 +28,7 @@ import {
   createPhaseReminderHook,
   createPostFileToolNudgeHook,
   createSessionGoalHook,
+  createSyntaxCheckHook,
   createTaskSessionManagerHook,
   createTodoContinuationHook,
   ForegroundFallbackManager,
@@ -44,14 +45,19 @@ import {
   ast_grep_replace,
   ast_grep_search,
   createCouncilTool,
+  createFuzzyGlobTool,
+  createFuzzyGrepTool,
+  createOllamaWebFetchTool,
+  createOllamaWebSearchTool,
   createPresetManager,
   createReadSessionTool,
+  createSemanticEditTool,
+  createSemanticFindTool,
   createSquadReportTools,
   createSquadTool,
   createSubtaskCommandManager,
   createSubtaskState,
   createSubtaskTool,
-  createWebfetchTool,
 } from './tools';
 import { recordTuiAgentModel, recordTuiAgentModels } from './tui-state';
 import {
@@ -91,21 +97,6 @@ const HEALTH_CHECK = {
   minTools: 5,
   minMcps: 1,
 } as const;
-
-/**
- * Probe jsdom at init time so the first webfetch call doesn't fail
- * silently. Logs a warning if jsdom can't be imported or instantiated,
- * but does not throw; the plugin works without webfetch.
- */
-async function probeJSDOM(): Promise<string | null> {
-  try {
-    const { JSDOM } = await import('jsdom');
-    new JSDOM('<!DOCTYPE html><html><body>test</body></html>');
-    return null;
-  } catch (err) {
-    return String(err);
-  }
-}
 
 // Module-level runtime preset tracking. Survives plugin re-inits triggered
 // by client.config.update() → Instance.dispose(). When the plugin function
@@ -150,12 +141,12 @@ const OhMyOpenCodeLite: Plugin = async (ctx) => {
   let presetManager: ReturnType<typeof createPresetManager>;
   let divoomManager: ReturnType<typeof createDivoomManager>;
   let councilTools: Record<string, unknown>;
-  let webfetch: ReturnType<typeof createWebfetchTool>;
   let rewriteDisplayNameMentions: ReturnType<
     typeof createDisplayNameMentionRewriter
   >;
   let subtaskCommandManager: ReturnType<typeof createSubtaskCommandManager>;
   let subtaskState: ReturnType<typeof createSubtaskState>;
+  let syntaxCheckHook: ReturnType<typeof createSyntaxCheckHook>;
 
   // Counters for post-init health check (set inside try, checked outside)
   let toolCount = 0;
@@ -261,7 +252,6 @@ const OhMyOpenCodeLite: Plugin = async (ctx) => {
       : {};
 
     mcps = createBuiltinMcps(config.disabled_mcps, config.websearch);
-    webfetch = createWebfetchTool(ctx);
 
     // Initialize MultiplexerSessionManager to handle OpenCode's built-in
     // Task tool sessions
@@ -329,6 +319,7 @@ const OhMyOpenCodeLite: Plugin = async (ctx) => {
       shouldManageSession: (sessionID) =>
         sessionAgentMap.get(sessionID) === 'orchestrator',
     });
+    syntaxCheckHook = createSyntaxCheckHook(ctx);
     interviewManager = createInterviewManager(ctx, config);
     presetManager = createPresetManager(ctx, config);
     divoomManager = createDivoomManager(config.divoom);
@@ -339,10 +330,11 @@ const OhMyOpenCodeLite: Plugin = async (ctx) => {
     toolCount =
       Object.keys(councilTools).length +
       Object.keys(todoContinuationHook.tool).length +
-      1 + // webfetch
+      2 + // ollama webfetch, websearch
       2 + // ast_grep_search, ast_grep_replace
       2 + // subtask, read_session
-      6; // squad + 5 report tools
+      6 + // squad + 5 report tools
+      4; // fuzzy glob, fuzzy grep, semantic edit, semantic find
   } catch (err) {
     // Plugin init failed: log visibly before re-throwing so the user
     // sees something actionable instead of a silent "loaded but empty".
@@ -388,17 +380,6 @@ const OhMyOpenCodeLite: Plugin = async (ctx) => {
     });
   }
 
-  // ── Probe jsdom (async, non-blocking) ───────────────────────────────
-  // Don't await this; we don't want to block init. The warning will
-  // appear shortly after startup if jsdom is broken.
-  probeJSDOM().then((err) => {
-    if (err) {
-      const msg = `jsdom probe failed; webfetch tool will not work: ${err}`;
-      log(`[plugin] WARN: ${msg}`);
-      appLog(ctx, 'warn', msg).catch(() => {});
-    }
-  });
-
   divoomManager.onPluginLoad();
 
   return {
@@ -408,7 +389,8 @@ const OhMyOpenCodeLite: Plugin = async (ctx) => {
 
     tool: {
       ...councilTools,
-      webfetch,
+      webfetch: createOllamaWebFetchTool(),
+      websearch: createOllamaWebSearchTool(),
       ...todoContinuationHook.tool,
       ast_grep_search,
       ast_grep_replace,
@@ -416,6 +398,15 @@ const OhMyOpenCodeLite: Plugin = async (ctx) => {
       read_session: createReadSessionTool(ctx.client, subtaskState),
       squad: createSquadTool(ctx),
       ...createSquadReportTools(),
+      // Fuzzy search tools — override built-in glob and grep with
+      // FFF-powered frecency-ranked, git-aware search.  Requires
+      // optional dependency @ff-labs/fff-node; falls back to error
+      // message when unavailable.
+      glob: createFuzzyGlobTool(),
+      grep: createFuzzyGrepTool(),
+      // Semantic tools — AI-powered code edit and search via child sessions
+      semantic_edit: createSemanticEditTool(ctx),
+      semantic_find: createSemanticFindTool(ctx),
     },
 
     mcp: mcps,
@@ -1234,6 +1225,27 @@ const OhMyOpenCodeLite: Plugin = async (ctx) => {
             callID?: string;
           },
           output as { output: unknown },
+        ),
+      );
+
+      await runPostToolHook('syntax-check', () =>
+        syntaxCheckHook['tool.execute.after'](
+          input as {
+            tool: string;
+            sessionID?: string;
+            callID?: string;
+            args?: {
+              path?: string;
+              file_path?: string;
+              filePath?: string;
+              [key: string]: unknown;
+            };
+          },
+          output as {
+            title: string;
+            output: string;
+            metadata: unknown;
+          },
         ),
       );
 
