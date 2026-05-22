@@ -512,6 +512,22 @@ Use this section as a map: start with installation, then jump to features, confi
 | **[Interview](docs/interview.md)** | Turn rough ideas into a structured markdown spec through a browser-based Q&A flow |
 | **[Divoom Display](docs/divoom.md)** | Mirror orchestrator and specialist-agent activity to a Divoom MiniToo Bluetooth display |
 
+### Plugin Load Order
+
+OpenCode executes `tool.execute.before` hooks in the order plugins are listed in `opencode.json(c)`. When using **lean-ctx** (or any other plugin that rewrites bash commands), **oh-my-opencode-slim must come first** so that the head/tail pipe stripper runs before command rewriting:
+
+```jsonc
+// opencode.jsonc — correct order
+{
+  "plugin": [
+    "file:///path/to/oh-my-opencode-slim",  // strips | head/tail first
+    "file:///path/to/lean-ctx"                // then rewrites with lean-ctx
+  ]
+}
+```
+
+If lean-ctx runs first, it wraps the command into `lean-ctx hook rewrite-inline … | head -n 50`, and the pipe inside the rewritten string would be incorrectly stripped.
+
 ### ⚙️ Config & Reference
 
 | Doc | What it covers |

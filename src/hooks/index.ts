@@ -1,4 +1,5 @@
 export { createCapitalsContextHook } from '../capitals-context';
+export { createHeadTailStrippingHook } from '../no-head-tail';
 export { createApplyPatchHook } from './apply-patch';
 export type { AutoUpdateCheckerOptions } from './auto-update-checker';
 export { createAutoUpdateCheckerHook } from './auto-update-checker';

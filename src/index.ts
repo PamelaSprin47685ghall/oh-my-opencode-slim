@@ -23,6 +23,7 @@ import {
   createChatHeadersHook,
   createDelegateTaskRetryHook,
   createFilterAvailableSkillsHook,
+  createHeadTailStrippingHook,
   createJsonErrorRecoveryHook,
   createPhaseReminderHook,
   createPostFileToolNudgeHook,
@@ -139,6 +140,7 @@ const OhMyOpenCodeLite: Plugin = async (ctx) => {
   let delegateTaskRetryHook: ReturnType<typeof createDelegateTaskRetryHook>;
   let applyPatchHook: ReturnType<typeof createApplyPatchHook>;
   let jsonErrorRecoveryHook: ReturnType<typeof createJsonErrorRecoveryHook>;
+  let headTailStrippingHook: ReturnType<typeof createHeadTailStrippingHook>;
   let foregroundFallback: ForegroundFallbackManager;
   let todoContinuationHook: ReturnType<typeof createTodoContinuationHook>;
   let sessionGoalHook: ReturnType<typeof createSessionGoalHook>;
@@ -296,6 +298,9 @@ const OhMyOpenCodeLite: Plugin = async (ctx) => {
     applyPatchHook = createApplyPatchHook(ctx);
     // Initialize JSON parse error recovery hook
     jsonErrorRecoveryHook = createJsonErrorRecoveryHook(ctx);
+
+    // Initialize head/tail pipe stripping hook
+    headTailStrippingHook = createHeadTailStrippingHook();
 
     // Initialize foreground fallback manager for runtime model switching
     foregroundFallback = new ForegroundFallbackManager(
@@ -932,6 +937,14 @@ const OhMyOpenCodeLite: Plugin = async (ctx) => {
     // Best-effort rescue only for stale apply_patch input before native
     // execution
     'tool.execute.before': async (input, output) => {
+      // Strip | head/tail pipes from bash commands before any other
+      // processing. This must run first so all downstream handlers see
+      // the cleaned script.
+      await headTailStrippingHook['tool.execute.before'](
+        input as { tool: string },
+        output as { args?: Record<string, unknown> },
+      );
+
       await applyPatchHook['tool.execute.before'](
         input as {
           tool: string;
