@@ -1,5 +1,28 @@
 # PRD 变更日志
 
+## 2026-05-22: 移除超时机制，新增原理 N（时间无关性）
+
+### 1. 问题
+
+`squad-tool.ts` 和 `command.ts` 中存在 `SQUAD_TIMEOUT_MS = 10 * 60 * 1000`（10 分钟超时），用 `Promise.race` 包裹 `runSquad`。这与 nudge 机制的设计意图矛盾——nudge 基于次数而非时间（PRD-07 原理 N），超时是多余的时间假设。
+
+此外，nudge prompt 未携带 `agent` 和 `tools` 参数，导致子会话在 nudge 后丢失 squad 属性和阶段专属报告工具。
+
+### 2. 代码变更
+
+- 移除 `squad-tool.ts` 和 `command.ts` 中的 `SQUAD_TIMEOUT_MS` 常量和 `Promise.race` 超时包装，直接 `await runSquad(...)`。
+- 修复 `runtime.ts` nudge prompt：补全 `agent: stageAgent(ctx.stage)` 和 `tools: stageTools(ctx.stage)`，与初始 `createChild` 行为一致。
+
+### 3. PRD 变更
+
+- 新增原理 N：整个实现与时间无关。liveness 完全由语义信号和次数保证。
+- PRD-01：新增原理 N 定义和约束，更新架构特征表。
+- PRD-02：原理表新增 N 行，"哪些设计被原理证明是多余的"表新增 `SQUAD_TIMEOUT_MS` 条目。
+- PRD-04：schema 校验失败后的描述从"等待超时"改为"nudge 机制检测"。
+- PRD-07：移除超时相关描述，将"最大挂起时间与保活衰退契约"改为"保活衰退契约"，移除整体超时条目；Gate 故障模式表中 AI SDK force-kill 对策从"squad-tool timeout 作为最终保底"改为"进程已死，无需处理"；Liveness invariants 中"timeout/abort 清理"改为"abort 清理"。
+
+---
+
 ## 2026-05-21: 插件移植 — 从 addon wrapper 架构到 OpenCode plugin 架构
 
 ### 1. 架构变更

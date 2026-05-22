@@ -20,6 +20,7 @@
 | J   | 控制流中不主动 throw 任何东西                                       | 风格约定         |
 | K   | LLM 所见、系统所验、我们所使，三者合一                              | 工程约束         |
 | L   | 进入 gate 之前不得静默丢失 report                                   | liveness 约束    |
+| N   | 整个实现与时间无关                                                  | liveness 约束    |
 
 ---
 
@@ -84,7 +85,7 @@ pre-gate 阶段包括以下子阶段，每个都可能失败而不进入 gate：
 
 | 子阶段             | 失败处理                                     |
 | ------------------ | -------------------------------------------- |
-| 工具未被调用       | session 结束时 orchestrator 知道超时            |
+| 工具未被调用       | session 结束时 orchestrator 通过 promptPromise 检测 |
 | 找不到 ctx         | 返回错误字符串，LLM 可重试                     |
 | Schema validation  | 返回错误字符串，LLM 修正                     |
 | nextReport deliver | `structuredStore.set` + `nextReport.resolve` |
@@ -621,3 +622,4 @@ for each createdChildId:
 | `experiments.addonLaunch.squad`   | 不再需要：插件架构下工具定义通过 tools 参数控制                           | 删除，改用 tools 参数                     |
 | `SquadLaunchContext`              | 不再需要：上下文通过 squadSessions Map 按 sessionId 查找                 | 删除，改用 SquadSession 预注册            |
 | `globalRegistry` (context-registry)| 合并进 squadSessions                                                   | 删除，单一全局 Map                        |
+| `SQUAD_TIMEOUT_MS` 超时机制      | 违反 N：liveness 由语义信号保证（promptPromise resolve + nudge 次数），不依赖时间 | 已删除 ✅                                  |

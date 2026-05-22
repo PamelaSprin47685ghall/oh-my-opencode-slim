@@ -10,7 +10,6 @@ import type { SquadReport } from './schemas';
 import { squadSessions } from './squad-context';
 
 const COMMAND_NAME = 'squad';
-const SQUAD_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 
 export function createSquadCommandManager(ctx: PluginInput) {
   /**
@@ -76,22 +75,14 @@ export function createSquadCommandManager(ctx: PluginInput) {
     const createdChildIds = new Set<string>();
 
     try {
-      const result = await Promise.race([
-        runSquad({
-          client: ctx.client,
-          directory,
-          parentSessionId,
-          structuredStore,
-          createdChildIds,
-          intent,
-        }),
-        new Promise<never>((_, reject) =>
-          setTimeout(
-            () => reject(new Error('Squad execution timed out')),
-            SQUAD_TIMEOUT_MS,
-          ),
-        ),
-      ]);
+      const result = await runSquad({
+        client: ctx.client,
+        directory,
+        parentSessionId,
+        structuredStore,
+        createdChildIds,
+        intent,
+      });
 
       if (result.status === 'cancelled') {
         output.parts.push(

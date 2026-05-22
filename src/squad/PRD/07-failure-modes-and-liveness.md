@@ -90,15 +90,14 @@ SILENT_END
 
 ## Liveness invariants
 
-1. **每个 created child 最终必须**：进入 gate 并 accept/reject，或被 timeout/abort 清理，或返回明确 failure（含 nudge 兜底）。
+1. **每个 created child 最终必须**：进入 gate 并 accept/reject，或被 abort 清理，或返回明确 failure（含 nudge 兜底）。
 2. **squad parent 不允许**无限等待一个已静默结束且不会报告的 child。（原理 N：nudge 机制 + default report 兜底）
 3. **gate 一旦创建**，必须 release（原理 G）。
 4. **pre-gate 如果失败**，必须 fail closed 或返回错误字符串，不得静默通过（原理 L）。
 5. **cleanup 必须完整**：finally 块必须释放所有 gate、清理所有 squadSessions、abort 所有子会话（原理 H）。
 
-### 最大挂起时间与保活衰退契约
+### 保活衰退契约
 
-- **整体超时**：`squad-tool.ts` 设置 10 分钟超时（`SQUAD_TIMEOUT_MS = 10 * 60 * 1000`），超时后 Promise.race 触发超时错误。
 - **DAG 死锁破缺**：`runNodeLoop` 检测到环依赖时抛出异常，不无限等待。
 - **DAG 中止**：当 `runtime.isAborted()` 为 true 时，DAG 调度器在执行前检查并抛出 `'Squad aborted'`。
 - **节点级中止**：`withReviewLoop` 每次循环开头检查 `runtime.isAborted()`，如果已中止则 gateAccept + cleanup + throw。
@@ -127,7 +126,7 @@ SILENT_END
 | orchestrator 异常退出    | gate 永远 resolve 不了 | `squad-tool.ts` finally 块 release gate + abort children |
 | review 阶段抛异常        | gate 永远 resolve 不了 | try-catch 包裹 review，catch 中 gateAccept |
 | abort 时 gate 未 release | gate 永远 resolve 不了  | abort 路径先 gateAccept 再 cleanup + throw |
-| AI SDK force-kill        | gate promise 永远挂起  | squad-tool timeout 作为最终保底            |
+| AI SDK force-kill        | gate promise 永远挂起  | 进程已死，无需处理                         |
 
 ---
 

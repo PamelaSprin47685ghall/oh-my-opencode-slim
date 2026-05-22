@@ -60,7 +60,7 @@ OpenCode 核心（SDK）只提供 `session.create()`、`session.prompt()`、`ses
 
 ## 第一性原理
 
-squad 架构由以下 12 条第一性原理严格推导而来。任何设计决策必须能回溯到这些原理之一或组合。
+squad 架构由以下 14 条第一性原理严格推导而来。任何设计决策必须能回溯到这些原理之一或组合。
 
 ### A. 子会话是独立 AI workspace
 
@@ -141,6 +141,17 @@ squad 的二态 gate 协议只在 child 的报告工具成功执行到 `gateWait
 3. 没有 successful report 的 stream 必须保留重试机会。
 4. schema validation failure 不进入 gate，返回错误消息让 LLM 修正。
 
+### N. 整个实现与时间无关
+
+squad 的正确性不依赖任何超时、定时器或时间假设。LLM 推理时间不可预测，静默结束通过 `promptPromise` resolve 检测（语义信号），而非超时推断（时间假设）。nudge 机制基于次数而非时间。
+
+**约束**：
+
+1. 不使用 `setTimeout`/`setInterval` 做超时控制。
+2. 不依赖 wall-clock 时间做决策。
+3. liveness 完全由语义信号（`promptPromise` resolve、`nextReport` resolve、`gate` resolve）和次数（`nudgeCount`/`maxNudges`）保证。
+4. 唯一的外部终止机制是用户主动取消（`abortSignal`），属于语义动作而非时间条件。
+
 ## 从原理推导的架构特征
 
 | 特征                                       | 推导来源           | 代码体现                                                       |
@@ -158,6 +169,7 @@ squad 的二态 gate 协议只在 child 的报告工具成功执行到 `gateWait
 | Context 在 session.prompt() 之前注册       | A+F+L              | `squadSessions.set()` 在 `session.prompt()` 之前               |
 | Squad session 缺 ctx 时返回错误            | L                  | `gateWait()` 中 `if (!ctx)` 返回错误字符串                      |
 | Schema 必须 strict                          | K+L                | 所有 stage schema 加 `.strict()`                               |
+| 无超时、无定时器                            | N                  | nudge 基于次数不是时间，liveness 由语义信号保证               |
 
 ## 文件清单
 

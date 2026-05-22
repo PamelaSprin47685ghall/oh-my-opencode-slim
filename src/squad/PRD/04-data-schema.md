@@ -27,7 +27,7 @@ const ReviewSchema = z.object({ feedbackMarkdown: ... }); // 无 strict
 
 schema validation failure **不会进入 gate**，不会 `nextReport.resolve()`。它返回错误字符串给 LLM 修正。
 
-若 LLM 未修正而会话结束，orchestrator 的 `awaitReport` 将持续等待直到超时或外部中止。
+若 LLM 未修正而会话结束，orchestrator 的 `awaitReport` 将通过 nudge 机制检测到（原理 N），或被外部中止。
 
 ---
 

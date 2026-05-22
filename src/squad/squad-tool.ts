@@ -10,8 +10,6 @@ import {
 import type { SquadReport } from './schemas';
 import { squadSessions } from './squad-context';
 
-const SQUAD_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
-
 /**
  * Find the last report from the structured store to use for metadata.
  * Returns undefined if no reports were collected.
@@ -62,23 +60,15 @@ export function createSquadTool(ctx: PluginInput): ToolDefinition {
       const createdChildIds = new Set<string>();
 
       try {
-        const result = await Promise.race([
-          runSquad({
-            client: ctx.client,
-            directory,
-            parentSessionId,
-            structuredStore,
-            createdChildIds,
-            abortSignal: context.abort,
-            intent: args.intent,
-          }),
-          new Promise<never>((_, reject) =>
-            setTimeout(
-              () => reject(new Error('Squad execution timed out')),
-              SQUAD_TIMEOUT_MS,
-            ),
-          ),
-        ]);
+        const result = await runSquad({
+          client: ctx.client,
+          directory,
+          parentSessionId,
+          structuredStore,
+          createdChildIds,
+          abortSignal: context.abort,
+          intent: args.intent,
+        });
 
         // Set metadata for the tool result display
         const lastReport = lastReportFromStore(structuredStore);

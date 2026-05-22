@@ -332,7 +332,8 @@ export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
       // This allows detecting if the nudge itself also ends silently.
       ctx.resetPromptPromise?.();
 
-      // Fire the nudge prompt (noReply = false so the agent continues)
+      // Fire the nudge prompt — must re-assert agent & tools so the
+      // child session retains its squad role and stage-specific report tools.
       deps.client.session
         .prompt({
           responseStyle: 'data',
@@ -340,7 +341,9 @@ export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
           query: { directory: deps.directory },
           path: { id: childId },
           body: {
+            agent: stageAgent(ctx.stage),
             parts: [{ type: 'text', text: nudgeText }],
+            tools: stageTools(ctx.stage),
           },
         })
         .then(() => {
