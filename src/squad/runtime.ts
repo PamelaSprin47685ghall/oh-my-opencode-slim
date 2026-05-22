@@ -506,12 +506,19 @@ export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
           }
         }
 
-        const review = (await runtime.executeFresh({
-          stage: 'review',
-          agent: 'squad_reviewer',
-          prompt: buildReviewPrompt(report, fileContentsContext),
-          nodeName,
-        })) as ReviewReport;
+        let review: ReviewReport;
+        try {
+          review = (await runtime.executeFresh({
+            stage: 'review',
+            agent: 'squad_reviewer',
+            prompt: buildReviewPrompt(report, fileContentsContext),
+            nodeName,
+          })) as ReviewReport;
+        } catch (err) {
+          runtime.gateAccept(childId);
+          await runtime.cleanupChild(childId);
+          throw err;
+        }
 
         if (review.feedbackMarkdown != null) {
           runtime.gateReject(childId, review.feedbackMarkdown);
