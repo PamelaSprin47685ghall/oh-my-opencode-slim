@@ -41,6 +41,7 @@ import {
   MultiplexerSessionManager,
   startAvailabilityCheck,
 } from './multiplexer';
+import { createSquadCommandManager } from './squad/command';
 import {
   ast_grep_replace,
   ast_grep_search,
@@ -147,6 +148,7 @@ const OhMyOpenCodeLite: Plugin = async (ctx) => {
   let subtaskCommandManager: ReturnType<typeof createSubtaskCommandManager>;
   let subtaskState: ReturnType<typeof createSubtaskState>;
   let syntaxCheckHook: ReturnType<typeof createSyntaxCheckHook>;
+  let squadCommandManager: ReturnType<typeof createSquadCommandManager>;
 
   // Counters for post-init health check (set inside try, checked outside)
   let toolCount = 0;
@@ -326,6 +328,8 @@ const OhMyOpenCodeLite: Plugin = async (ctx) => {
 
     subtaskState = createSubtaskState();
     subtaskCommandManager = createSubtaskCommandManager(ctx, subtaskState);
+
+    squadCommandManager = createSquadCommandManager(ctx);
 
     toolCount =
       Object.keys(councilTools).length +
@@ -745,21 +749,7 @@ const OhMyOpenCodeLite: Plugin = async (ctx) => {
       presetManager.registerCommand(opencodeConfig);
       subtaskCommandManager.registerCommand(opencodeConfig);
 
-      // Register /squad command for S/M/L orchestration
-      if (!configCommand?.squad) {
-        (opencodeConfig.command as Record<string, unknown>).squad = {
-          template: [
-            'Call the squad tool with a detailed description of the task.',
-            '',
-            'Example: squad({ intent: "Refactor the auth module to use JWT" })',
-            '',
-            'The squad system will automatically determine task size (S/M/L),',
-            'create a plan, and execute with built-in review loops.',
-          ].join('\n'),
-          description:
-            'Execute a self-orchestrated S/M/L squad workflow for complex multi-step tasks',
-        };
-      }
+      squadCommandManager.registerCommand(opencodeConfig);
     },
 
     event: async (input) => {
@@ -995,6 +985,15 @@ const OhMyOpenCodeLite: Plugin = async (ctx) => {
       );
 
       await sessionGoalHook.handleCommandExecuteBefore(
+        input as {
+          command: string;
+          sessionID: string;
+          arguments: string;
+        },
+        output as { parts: Array<{ type: string; text?: string }> },
+      );
+
+      await squadCommandManager.handleCommandExecuteBefore(
         input as {
           command: string;
           sessionID: string;
