@@ -70,10 +70,17 @@ export interface SquadSession {
    */
   promptPromise?: Promise<void>;
   /**
-   * Replace promptPromise with a new never-resolving promise after a
-   * nudge, so we can detect the next silent ending.
+   * Replace promptPromise with a new Promise so we can detect the
+   * next silent ending. Each call creates a fresh Promise+resolve pair
+   * and stores the resolve in promptResolve.
    */
   resetPromptPromise?: () => void;
+  /**
+   * Resolve function for the current promptPromise. When the prompt
+   * (or nudge prompt) completes, we call promptResolve() so the
+   * awaitReportInternal race can detect the silent ending.
+   */
+  promptResolve?: () => void;
   /** Number of nudges sent so far. Incremented on each nudge, checked against maxNudges. */
   nudgeCount: number;
   /** Nudge config for this session. Falls back to DEFAULT_NUDGE_CONFIG. */

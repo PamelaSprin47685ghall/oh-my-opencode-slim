@@ -202,16 +202,9 @@ export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
       throw new Error('Squad child session did not return an id');
     }
 
-    // A Deferred that resolves when the child session finishes
+    // A promise that resolves when the child session finishes
     // (whether or not it called the report tool). Used to detect
     // silent endings for the nudge mechanism.
-    let promptResolve: () => void;
-    const promptPromise = new Promise<void>((resolve) => {
-      promptResolve = resolve;
-    });
-
-    // Register session in squadSessions before prompting so the
-    // report tool can find it when the child calls it.
     const ctx: SquadSession = {
       parentWorkspaceId: deps.parentSessionId,
       childSessionId,
@@ -219,23 +212,24 @@ export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
       structuredStore: deps.structuredStore,
       nodeName: params.nodeName,
       nextReport: new Deferred<void>(),
-      promptPromise,
+      promptPromise: undefined,
       resetPromptPromise: () => {
-        // After a nudge, replace promptPromise with a fresh never-resolving
-        // promise. The nudge prompt itself is a new session.prompt() call;
-        // when it completes, we replace again. This way, the
-        // awaitReportInternal race can detect the next silent ending.
-        let newResolve: () => void;
-        const newPromise = new Promise<void>((r) => {
-          newResolve = r;
+        // After a nudge, replace promptPromise with a fresh Promise
+        // so the next iteration of awaitReportInternal can detect
+        // a silent ending. Each call creates a new Promise+resolve
+        // pair and stores the resolve in promptResolve.
+        ctx.promptPromise = new Promise<void>((resolve) => {
+          ctx.promptResolve = resolve;
         });
-        ctx.promptPromise = newPromise;
-        ctx.resetPromptPromise = () => {
-          newResolve?.();
-        };
       },
       nudgeCount: 0,
     };
+
+    // Initialize promptPromise after ctx is fully constructed
+    // so the Promise callback can safely reference ctx.
+    ctx.promptPromise = new Promise<void>((resolve) => {
+      ctx.promptResolve = resolve;
+    });
     squadSessions.set(childSessionId, ctx);
     children.set(childSessionId, ctx);
     deps.createdChildIds.add(childSessionId);
@@ -257,10 +251,10 @@ export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
         },
       })
       .then(() => {
-        promptResolve?.();
+        ctx.promptResolve?.();
       })
       .catch(() => {
-        promptResolve?.();
+        ctx.promptResolve?.();
       });
 
     return childSessionId;
@@ -291,7 +285,11 @@ export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
       // Race: which resolves first?
       // - nextReport.promise → child called the report tool (success)
       // - promptPromise     → child ended without calling it (nudge)
-      const report = await Promise.race([
+      // - abortSignal       → parent cancelled (DAG error / user abort)
+      const racers: Promise<
+        | { type: 'report'; report: SquadReport | undefined }
+        | { type: 'silent_end' }
+      >[] = [
         ctx.nextReport.promise.then(() => {
           const report = deps.structuredStore.get(childId);
           return { type: 'report' as const, report };
@@ -299,7 +297,25 @@ export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
         (ctx.promptPromise ?? new Promise<never>(() => {})).then(() => {
           return { type: 'silent_end' as const };
         }),
-      ]);
+      ];
+
+      if (deps.abortSignal) {
+        const signal = deps.abortSignal;
+        racers.push(
+          new Promise<never>((_, reject) => {
+            const onAbort = () => reject(new Error('Squad aborted'));
+            if (signal.aborted) {
+              onAbort();
+              return;
+            }
+            signal.addEventListener('abort', onAbort, {
+              once: true,
+            });
+          }),
+        );
+      }
+
+      const report = await Promise.race(racers);
 
       if (report.type === 'report') {
         // Child submitted a report — reset nextReport for potential retry
@@ -321,6 +337,12 @@ export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
         // After resolving nextReport, the gate flow will proceed normally.
         // Reset nextReport for potential retry (gate reject → child resubmits)
         ctx.nextReport = new Deferred<void>();
+        // The child never called the report tool, so ctx.gate is undefined.
+        // Provide a pre-resolved gate so callers that try to gateAccept/gateReject
+        // don't silently no-op — the gate is already accepted.
+        if (!ctx.gate) {
+          ctx.gate = { resolve: () => {} };
+        }
         return defaultReport as T;
       }
 
@@ -347,12 +369,12 @@ export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
           },
         })
         .then(() => {
-          // Nudge prompt finished — if resetPromptPromise exists, call it
-          // so the race in the next iteration of this loop can detect it.
-          ctx.resetPromptPromise?.();
+          // Nudge prompt finished — resolve the current promptPromise
+          // so the race in the next loop iteration can detect it.
+          ctx.promptResolve?.();
         })
         .catch(() => {
-          ctx.resetPromptPromise?.();
+          ctx.promptResolve?.();
         });
     }
   }
@@ -368,15 +390,6 @@ export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
       if (ctx) {
         // Accept immediately — fresh stages don't need review loops
         ctx.gate?.resolve({ accepted: true });
-
-        // Wait for the child session to finish naturally before cleanup.
-        // When the gate resolves (accept), the child receives the verdict
-        // and may still be generating a closing response. Awaiting
-        // promptPromise ensures stream output, state updates, and
-        // network connections are fully settled before we abort the
-        // session — eliminating the race between cleanup and in-flight
-        // output.
-        await ctx.promptPromise?.catch(() => {});
       }
 
       return report;
@@ -396,24 +409,15 @@ export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
       ctx.gate?.resolve({ accepted: true }); // G: release gate
     }
 
+    // Remove from global registry first so orphan sessions fail closed
+    // in gateWait — they'll see disposed/missing ctx and return immediately.
     squadSessions.delete(childId);
     deps.structuredStore.delete(childId);
     children.delete(childId);
     deps.createdChildIds.delete(childId);
-
-    // Abort the child session (H: kill children on cleanup)
-    try {
-      await deps.client.session.abort({
-        path: { id: childId },
-        query: { directory: deps.directory },
-      });
-    } catch {
-      // Best-effort cleanup
-    }
   }
 
   async function cleanupAllInternal(): Promise<void> {
-    // Snapshot IDs before clearing so we can abort them after
     const allChildIds = [...deps.createdChildIds];
 
     for (const [childId, ctx] of children.entries()) {
@@ -421,24 +425,12 @@ export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
       ctx.gate?.resolve({ accepted: true }); // G: release gate
       deps.structuredStore.delete(childId);
     }
-    // Also clean global registry
+    // Also clean global registry so orphan sessions fail closed
     for (const childId of allChildIds) {
       squadSessions.delete(childId);
     }
     children.clear();
     deps.createdChildIds.clear();
-
-    // Abort all child sessions (H)
-    for (const childId of allChildIds) {
-      try {
-        await deps.client.session.abort({
-          path: { id: childId },
-          query: { directory: deps.directory },
-        });
-      } catch {
-        // Best-effort
-      }
-    }
   }
 
   const runtime: SquadRuntime = {
@@ -495,7 +487,6 @@ export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
         const ctx = children.get(childId);
         if (ctx?.nudgeExhausted) {
           runtime.gateAccept(childId);
-          await ctx.promptPromise?.catch(() => {});
           await runtime.cleanupChild(childId);
           return report;
         }
@@ -536,13 +527,6 @@ export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
         }
 
         runtime.gateAccept(childId);
-
-        // Wait for the child session to finish naturally before cleanup.
-        // After gateAccept, the child receives the acceptance verdict and
-        // may still be generating output. Awaiting promptPromise ensures
-        // all in-flight output is fully settled before session abort.
-        const acceptCtx = children.get(childId);
-        await acceptCtx?.promptPromise?.catch(() => {});
 
         await runtime.cleanupChild(childId);
         return report;
