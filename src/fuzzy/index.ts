@@ -15,9 +15,6 @@ import { buildQuery } from './query';
 
 const z = tool.schema;
 
-const DEFAULT_GREP_LIMIT = 20;
-const DEFAULT_FIND_LIMIT = 30;
-
 // Lazy loader — avoids CJS require() of ESM-only package (@ff-labs/fff-node has no "require" export)
 // Uses Function constructor so TypeScript CJS compilation doesn't transform import() to require()
 const fffImport = new Function('spec', 'return import(spec)') as (
@@ -69,7 +66,7 @@ Returns matching file paths ranked by frecency (usage frequency × recency). Git
 - Exclude noise: exclude="test/,*.min.js"
 - List directory: path="src/components/**"
 
-Default limit 30. Use cursor for pagination when results are truncated.`;
+Use cursor for pagination when results are truncated.`;
 
 export function createFuzzyGlobTool(): ToolDefinition {
   return tool({
@@ -134,7 +131,7 @@ export function createFuzzyGlobTool(): ToolDefinition {
 
         const effectiveLimit = resumed
           ? resumed.pageSize
-          : Math.max(1, args.limit ?? DEFAULT_FIND_LIMIT);
+          : (args.limit ?? null);
         const query = resumed
           ? resumed.query
           : buildQuery(
@@ -149,7 +146,7 @@ export function createFuzzyGlobTool(): ToolDefinition {
 
         const searchResult = f.fileSearch(query, {
           pageIndex,
-          pageSize: effectiveLimit,
+          pageSize: effectiveLimit ?? 9999,
         });
         if (!searchResult?.ok) {
           throw new Error(searchResult?.error || 'find failed');
@@ -163,22 +160,18 @@ export function createFuzzyGlobTool(): ToolDefinition {
         );
         let output = formatted.output;
         const shownSoFar =
-          pageIndex * effectiveLimit + (result?.items?.length ?? 0);
+          pageIndex * (effectiveLimit ?? 9999) + (result?.items?.length ?? 0);
         const hasMore =
+          effectiveLimit !== null &&
           (result?.items?.length ?? 0) >= effectiveLimit &&
           (result?.totalMatched ?? 0) > shownSoFar;
         const notices: string[] = [];
-        if (formatted.weak && formatted.shownCount > 0) {
-          notices.push(
-            `Query "${searchPattern}" produced only weak scattered fuzzy matches. Output capped at ${formatted.shownCount}/${result?.totalMatched ?? 0}.`,
-          );
-        }
         if (!formatted.weak && hasMore) {
           const remaining = (result?.totalMatched ?? 0) - shownSoFar;
           const cursorId = storeFindCursor({
             query,
             pattern: searchPattern,
-            pageSize: effectiveLimit,
+            pageSize: effectiveLimit ?? 9999,
             nextPageIndex: pageIndex + 1,
             externalBasePath: externalBasePath ?? undefined,
           });
@@ -213,7 +206,7 @@ const GREP_DESCRIPTION = `Search file contents using fuzzy-aware content search.
 - Fuzzy fallback when no exact matches found
 - Context lines: use context parameter for surrounding lines
 
-Default limit 20. Use cursor for pagination. Supports constraint syntax in pattern: '*.ts pattern' or 'src/ pattern'.`;
+Use cursor for pagination. Supports constraint syntax in pattern: '*.ts pattern' or 'src/ pattern'.`;
 
 export function createFuzzyGrepTool(): ToolDefinition {
   return tool({
@@ -282,7 +275,7 @@ export function createFuzzyGrepTool(): ToolDefinition {
             })()
           : await FinderManager.get(activeCwd);
 
-        const effectiveLimit = Math.max(1, args.limit ?? DEFAULT_GREP_LIMIT);
+        const effectiveLimit = args.limit ?? null;
         const query = buildQuery(
           externalBasePath ? externalPathConstraint : args.path,
           args.pattern,
@@ -315,10 +308,11 @@ export function createFuzzyGrepTool(): ToolDefinition {
         }
 
         const smartCase = args.caseSensitive !== true;
+        const effectiveLimitForApi = effectiveLimit ?? 9999;
         const grepResult = f.grep(query, {
           mode,
           smartCase,
-          maxMatchesPerFile: Math.min(effectiveLimit, 50),
+          maxMatchesPerFile: Math.min(effectiveLimitForApi, 50),
           cursor: args.cursor ? (getGrepCursor(args.cursor) ?? null) : null,
           beforeContext: args.context ?? 0,
           afterContext: args.context ?? 0,
@@ -335,7 +329,7 @@ export function createFuzzyGrepTool(): ToolDefinition {
             const fuzzy = f.grep(query, {
               mode: 'fuzzy',
               smartCase,
-              maxMatchesPerFile: Math.min(effectiveLimit, 50),
+              maxMatchesPerFile: Math.min(effectiveLimitForApi, 50),
               cursor: null,
               beforeContext: 0,
               afterContext: 0,
@@ -351,7 +345,7 @@ export function createFuzzyGrepTool(): ToolDefinition {
         }
 
         let isGrepGlobalTruncated = false;
-        if (result?.items && result.items.length > effectiveLimit) {
+        if (effectiveLimit !== null && result?.items && result.items.length > effectiveLimit) {
           result = {
             ...result,
             items: result.items.slice(0, effectiveLimit),
@@ -366,7 +360,7 @@ export function createFuzzyGrepTool(): ToolDefinition {
             `Invalid regex: ${result.regexFallbackError}, used literal match`,
           );
         }
-        if (isGrepGlobalTruncated) {
+        if (isGrepGlobalTruncated && effectiveLimit !== null) {
           notices.push(`Output truncated to ${effectiveLimit} matches`);
         }
         if (result?.nextCursor) {

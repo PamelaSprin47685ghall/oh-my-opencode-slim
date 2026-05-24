@@ -40,10 +40,13 @@ function fffFileAnnotation(item: FileAnnotationItem): string {
 
 // ── Grep output formatting ──
 
-export function formatGrepOutput(result: Pick<GrepResult, 'items'>): string {
+export function formatGrepOutput(
+  result: Pick<GrepResult, 'items' | 'totalMatched'>,
+): string {
   try {
     if (!result?.items?.length) return 'No matches found';
-    const lines: string[] = [];
+    const totalMatched = result.totalMatched ?? result.items.length;
+    const lines: string[] = [`${totalMatched} match${totalMatched === 1 ? '' : 'es'}`, ''];
     let currentFile = '';
     for (const match of result.items) {
       if (!match) continue;
@@ -82,11 +85,12 @@ export interface FormattedFindOutput {
   output: string;
   weak: boolean;
   shownCount: number;
+  totalMatched: number;
 }
 
 export function formatFindOutput(
-  result: Pick<SearchResult, 'items' | 'scores'>,
-  limit: number,
+  result: Pick<SearchResult, 'items' | 'scores' | 'totalMatched'>,
+  limit: number | null,
   pattern: string,
 ): FormattedFindOutput {
   try {
@@ -95,29 +99,36 @@ export function formatFindOutput(
         output: 'No files found matching pattern',
         weak: false,
         shownCount: 0,
+        totalMatched: 0,
       };
     }
     const topScore = result.scores?.[0]?.total ?? 0;
     const weak = topScore < weakScoreThreshold(pattern);
-    const effective = weak ? Math.min(FIND_WEAK_SAMPLE_SIZE, limit) : limit;
-    const shown = result.items.slice(0, effective);
+    const totalMatched = result.totalMatched ?? result.items.length;
+    const effectiveLimit = weak
+      ? Math.min(FIND_WEAK_SAMPLE_SIZE, limit ?? totalMatched)
+      : (limit ?? totalMatched);
+    const shown = result.items.slice(0, effectiveLimit);
+    const header = `${totalMatched} result${totalMatched === 1 ? '' : 's'}${weak ? ` (weak matches, showing ${shown.length})` : ''}`;
     return {
-      output: shown
+      output: `${header}\n${shown
         .map((p: { relativePath?: string } | null) =>
           p
             ? `${p.relativePath}${fffFileAnnotation(p as FileAnnotationItem)}`
             : '',
         )
         .filter(Boolean)
-        .join('\n'),
+        .join('\n')}`,
       weak,
       shownCount: shown.length,
+      totalMatched,
     };
   } catch {
     return {
       output: '(error formatting find output)',
       weak: false,
       shownCount: 0,
+      totalMatched: 0,
     };
   }
 }

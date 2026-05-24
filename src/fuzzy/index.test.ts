@@ -126,7 +126,7 @@ describe('buildQuery', () => {
 
 describe('formatGrepOutput', () => {
   it('returns no matches message for empty result', () => {
-    expect(formatGrepOutput({ items: [] })).toBe('No matches found');
+    expect(formatGrepOutput({ items: [], totalMatched: 0 })).toBe('No matches found');
   });
 
   it('formats grep matches grouped by file', () => {
@@ -169,9 +169,11 @@ describe('formatGrepOutput', () => {
           contextAfter: [],
         },
       ],
+      totalMatched: 2,
     };
 
     const output = formatGrepOutput(result);
+    expect(output).toContain('2 matches');
     expect(output).toContain('src/index.ts');
     expect(output).toContain('10:');
     expect(output).toContain('const x = 1;');
@@ -182,12 +184,13 @@ describe('formatGrepOutput', () => {
 
 describe('formatFindOutput', () => {
   it('returns no files message for empty result', () => {
-    const result = formatFindOutput({ items: [], scores: [] }, 10, 'test');
+    const result = formatFindOutput({ items: [], scores: [], totalMatched: 0 }, null, 'test');
     expect(result.output).toBe('No files found matching pattern');
     expect(result.weak).toBe(false);
+    expect(result.totalMatched).toBe(0);
   });
 
-  it('formats file paths', () => {
+  it('formats file paths with total count', () => {
     const result = formatFindOutput(
       {
         items: [
@@ -216,12 +219,15 @@ describe('formatFindOutput', () => {
             matchType: 'fuzzy',
           },
         ],
+        totalMatched: 1,
       },
-      10,
+      null,
       'main',
     );
+    expect(result.output).toContain('1 result');
     expect(result.output).toContain('src/main.ts');
     expect(result.weak).toBe(false);
+    expect(result.totalMatched).toBe(1);
   });
 
   it('detects weak matches with low score', () => {
@@ -253,13 +259,16 @@ describe('formatFindOutput', () => {
             matchType: 'fuzzy',
           },
         ],
+        totalMatched: 10,
       },
-      10,
+      null,
       'veryLongQueryPattern',
     );
     expect(result.weak).toBe(true);
-    // Weak matches are capped at FIND_WEAK_SAMPLE_SIZE
     expect(result.shownCount).toBeLessThanOrEqual(5);
+    expect(result.totalMatched).toBe(10);
+    expect(result.output).toContain('10 results');
+    expect(result.output).toContain('weak matches');
   });
 });
 
