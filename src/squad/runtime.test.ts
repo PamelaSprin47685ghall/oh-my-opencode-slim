@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { renderNudgePrompt } from './prompts';
+import { armPromptCompletion } from './runtime';
 import type { GlobalPlanReport, SquadReport } from './schemas';
 import {
   DEFAULT_NUDGE_CONFIG,
@@ -91,7 +92,6 @@ describe('awaitReportInternal nudge flow', () => {
       structuredStore: new Map<string, SquadReport>(),
       nextReport,
       promptPromise,
-      resetPromptPromise: () => {},
       nudgeCount: 0,
     };
 
@@ -152,6 +152,54 @@ describe('awaitReportInternal nudge flow', () => {
     ctx.nudgeCount++;
     expect(ctx.nudgeCount).toBe(3);
     expect(ctx.nudgeCount >= DEFAULT_NUDGE_CONFIG.maxNudges).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// armPromptCompletion — stale prompt cannot resolve newer promise
+// ---------------------------------------------------------------------------
+
+describe('armPromptCompletion', () => {
+  test('stale prompt completion does not resolve the latest prompt promise', async () => {
+    const ctx = {} as Pick<SquadSession, 'promptPromise'>;
+
+    const resolveFirst = armPromptCompletion(ctx);
+    const firstPromise = ctx.promptPromise;
+
+    const resolveSecond = armPromptCompletion(ctx);
+    const secondPromise = ctx.promptPromise;
+
+    let firstResolved = false;
+    let secondResolved = false;
+
+    firstPromise?.then(() => {
+      firstResolved = true;
+    });
+    secondPromise?.then(() => {
+      secondResolved = true;
+    });
+
+    // Resolving the first (stale) prompt must not resolve the second
+    resolveFirst();
+    await Promise.resolve();
+
+    expect(firstResolved).toBe(true);
+    expect(secondResolved).toBe(false);
+
+    // Resolving the second (current) prompt works normally
+    resolveSecond();
+    await Promise.resolve();
+
+    expect(secondResolved).toBe(true);
+  });
+
+  test('armPromptCompletion sets promptPromise on session', () => {
+    const ctx = {} as Pick<SquadSession, 'promptPromise'>;
+    expect(ctx.promptPromise).toBeUndefined();
+
+    armPromptCompletion(ctx);
+    expect(ctx.promptPromise).toBeDefined();
+    expect(ctx.promptPromise).toBeInstanceOf(Promise);
   });
 });
 

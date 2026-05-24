@@ -115,6 +115,40 @@ function stageTools(
   return tools;
 }
 
+/**
+ * Create an independent completion promise for the current prompt
+ * generation. Returns a resolve function that is bound to *this*
+ * specific promise — calling it will never affect a subsequent
+ * promptPromise set by a later call to armPromptCompletion.
+ *
+ * This eliminates the race where a stale prompt completion
+ * accidentally resolves a newer nudge's promptPromise, which
+ * caused repeated nudge firing.
+ */
+export function armPromptCompletion(
+  session: Pick<SquadSession, 'promptPromise'>,
+): () => void {
+  const completion = new Deferred<void>();
+  session.promptPromise = completion.promise;
+  return () => completion.resolve();
+}
+
+function startTrackedPrompt(
+  session: Pick<SquadSession, 'promptPromise'>,
+  start: () => Promise<unknown>,
+): void {
+  const resolvePrompt = armPromptCompletion(session);
+
+  Promise.resolve()
+    .then(start)
+    .then(() => {
+      resolvePrompt();
+    })
+    .catch(() => {
+      resolvePrompt();
+    });
+}
+
 /** Map stage name to the agent that should run it. */
 function stageAgent(
   stage: SquadSession['stage'],
@@ -209,9 +243,7 @@ export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
       throw new Error('Squad child session did not return an id');
     }
 
-    // A promise that resolves when the child session finishes
-    // (whether or not it called the report tool). Used to detect
-    // silent endings for the nudge mechanism.
+    // Per-child context — promptPromise is set by startTrackedPrompt below.
     const ctx: SquadSession = {
       parentWorkspaceId: deps.parentSessionId,
       childSessionId,
@@ -219,34 +251,19 @@ export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
       structuredStore: deps.structuredStore,
       nodeName: params.nodeName,
       nextReport: new Deferred<void>(),
-      promptPromise: undefined,
-      resetPromptPromise: () => {
-        // After a nudge, replace promptPromise with a fresh Promise
-        // so the next iteration of awaitReportInternal can detect
-        // a silent ending. Each call creates a new Promise+resolve
-        // pair and stores the resolve in promptResolve.
-        ctx.promptPromise = new Promise<void>((resolve) => {
-          ctx.promptResolve = resolve;
-        });
-      },
       nudgeCount: 0,
     };
 
-    // Initialize promptPromise after ctx is fully constructed
-    // so the Promise callback can safely reference ctx.
-    ctx.promptPromise = new Promise<void>((resolve) => {
-      ctx.promptResolve = resolve;
-    });
     squadSessions.set(childSessionId, ctx);
     children.set(childSessionId, ctx);
     deps.createdChildIds.add(childSessionId);
 
     // Fire prompt — do NOT await it; the child runs in the background.
     // The gate mechanism (nextReport + gate) is our synchronization point.
-    // When prompt finishes, resolve promptPromise so awaitReportInternal
-    // can detect a silent ending.
-    deps.client.session
-      .prompt({
+    // startTrackedPrompt sets up an independent completion promise so
+    // awaitReportInternal can detect silent endings.
+    startTrackedPrompt(ctx, () =>
+      deps.client.session.prompt({
         responseStyle: 'data',
         throwOnError: true,
         query: { directory: deps.directory },
@@ -256,13 +273,8 @@ export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
           parts: [{ type: 'text', text: params.prompt }],
           tools,
         },
-      })
-      .then(() => {
-        ctx.promptResolve?.();
-      })
-      .catch(() => {
-        ctx.promptResolve?.();
-      });
+      }),
+    );
 
     return childSessionId;
   }
@@ -353,18 +365,14 @@ export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
         return defaultReport as T;
       }
 
-      // Send nudge — increment counter and fire a new prompt
+      // Send nudge — increment counter and fire a new prompt.
+      // startTrackedPrompt creates an independent completion promise
+      // for this nudge so stale completions cannot affect it.
       ctx.nudgeCount++;
       const nudgeText = renderNudgePrompt(ctx.stage, ctx.nudgeCount, maxNudges);
 
-      // Replace promptPromise with a new one for the nudge prompt.
-      // This allows detecting if the nudge itself also ends silently.
-      ctx.resetPromptPromise?.();
-
-      // Fire the nudge prompt — must re-assert agent & tools so the
-      // child session retains its squad role and stage-specific report tools.
-      deps.client.session
-        .prompt({
+      startTrackedPrompt(ctx, () =>
+        deps.client.session.prompt({
           responseStyle: 'data',
           throwOnError: true,
           query: { directory: deps.directory },
@@ -374,15 +382,8 @@ export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
             parts: [{ type: 'text', text: nudgeText }],
             tools: stageTools(ctx.stage),
           },
-        })
-        .then(() => {
-          // Nudge prompt finished — resolve the current promptPromise
-          // so the race in the next loop iteration can detect it.
-          ctx.promptResolve?.();
-        })
-        .catch(() => {
-          ctx.promptResolve?.();
-        });
+        }),
+      );
     }
   }
 

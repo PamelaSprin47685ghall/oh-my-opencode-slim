@@ -64,23 +64,16 @@ export interface SquadSession {
   };
   disposed?: boolean;
   /**
-   * The promise returned by client.session.prompt() for this child.
-   * Resolves when the child session finishes (either with or without
-   * calling the report tool). Used to detect silent endings.
+   * Completion signal for the currently tracked prompt generation
+   * (initial prompt or the latest nudge prompt).
+   *
+   * Each generation must get its own Promise/resolve pair via
+   * armPromptCompletion(). A stale older prompt completion must never
+   * resolve a newer promptPromise, otherwise awaitReportInternal can
+   * mistake an in-flight nudge for another silent end and send
+   * repeated nudges.
    */
   promptPromise?: Promise<void>;
-  /**
-   * Replace promptPromise with a new Promise so we can detect the
-   * next silent ending. Each call creates a fresh Promise+resolve pair
-   * and stores the resolve in promptResolve.
-   */
-  resetPromptPromise?: () => void;
-  /**
-   * Resolve function for the current promptPromise. When the prompt
-   * (or nudge prompt) completes, we call promptResolve() so the
-   * awaitReportInternal race can detect the silent ending.
-   */
-  promptResolve?: () => void;
   /** Number of nudges sent so far. Incremented on each nudge, checked against maxNudges. */
   nudgeCount: number;
   /** Nudge config for this session. Falls back to DEFAULT_NUDGE_CONFIG. */
