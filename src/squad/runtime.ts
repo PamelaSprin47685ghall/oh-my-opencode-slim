@@ -58,7 +58,9 @@ function stageTools(
   additionalTools?: Record<string, boolean>,
 ): Record<string, boolean> {
   const tools: Record<string, boolean> = {
-    // Stage-specific report tool — always enabled
+    // Squad entry points — never available in child sessions (anti-recursion)
+    squad: false,
+    // Stage-specific report tools — only the current stage is enabled
     squad_global_plan: false,
     squad_review: false,
     squad_dag_design: false,
