@@ -74,7 +74,7 @@ async function gateWait(
   });
 
   if (verdict.accepted) {
-    return 'Report accepted.';
+    return 'Report accepted. No further work is required.';
   }
 
   return `Report rejected. Feedback:\n${verdict.feedback}\n\nRevise and call the same report tool again.`;

@@ -73,7 +73,7 @@ if (ctx.disposed) return 'Error: Squad session is no longer available.';
 
 **阶段 c — 决议：** 外部（orchestrator）通过 `gateAccept` 或 `gateReject` 触发 gate 决议：
 
-- **Accept：** 返回字符串 `"Report accepted."`。child 知道当前阶段完成。
+- **Accept：** 返回字符串 `"Report accepted. No further work is required."`。child 知道当前阶段完成。
 - **Reject：** 重置 `nextReport`，返回反馈字符串 `"Report rejected. Feedback:\n..."`。child 据此修改后重试。
 
 无论哪种决议，`gateWait` 返回后工具的 `execute` 即结束。

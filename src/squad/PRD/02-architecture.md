@@ -115,10 +115,10 @@ pre-gate 阶段包括以下子阶段，每个都可能失败而不进入 gate：
 B ── child 必须知道工具调用的结果
 E ── 不能手工造 `{success: true}`
   ↓
-推论：if (verdict.accepted) { return 'Report accepted.' }
+推论：if (verdict.accepted) { return 'Report accepted. No further work is required.' }
   简单字符串，不违反 E（这是 gate accept 的自然结果）。
   ↓
-代码：gateWait accept 分支 → return 'Report accepted.'
+代码：gateWait accept 分支 → return 'Report accepted. No further work is required.'
 ```
 
 ---
@@ -591,7 +591,7 @@ orchestrator runSquad(params)
 │ │ → 新 gateWait → 新 nextReport │
 │ │ │
 │ └─ accept → gateAccept → cleanupChild ───────┘ [§3]
-│ gateWait → return 'Report accepted.' │
+│ gateWait → return 'Report accepted. No further work is required.' │
 │ → child 永久完成 │
 │
 └─ return SquadResult ───────────────────────────┘

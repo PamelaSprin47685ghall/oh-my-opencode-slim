@@ -70,7 +70,7 @@ squad 架构由以下 14 条第一性原理严格推导而来。任何设计决�
 
 ### B. 报告工具的完成门票
 
-当报告工具返回 "Report accepted." 时，child 知道可以停止当前阶段。返回反馈字符串时，child 继续修改。
+当报告工具返回 "Report accepted. No further work is required." 时，child 知道可以停止当前阶段。返回反馈字符串时，child 继续修改。
 
 **约束**：gate 机制是 orchestrator 控制 child 的唯一方式。
 
@@ -88,7 +88,7 @@ orchestrator 审查后如果拒绝，child 必须知道**为什么**并有机会
 
 ### E. 绝不手工造 ok 回复
 
-"Report accepted." 只能由 gate accept 产生。
+"Report accepted. No further work is required." 只能由 gate accept 产生。
 
 **约束**：accept 分支返回成功字符串。reject 分支的反馈不是 ok 回复，是被拒绝的决议。
 
@@ -158,7 +158,7 @@ squad 的正确性不依赖任何超时、定时器或时间假设。LLM 推理�
 | ------------------------------------------ | ------------------ | -------------------------------------------------------------- |
 | 报告工具拦截并 hang                        | A+B                | `gateWait()`                                                     |
 | 两个同步原语（nextReport + gate）          | A+D                | `Deferred` + `GateVerdict`                                     |
-| Accept 侧返回成功字符串                    | B+E                | `return 'Report accepted.'`                                    |
+| Accept 侧返回成功字符串                    | B+E                | `return 'Report accepted. No further work is required.'`                                    |
 | Reject 侧返回反馈字符串                    | D+E                | `return 'Report rejected. Feedback:\n...'`                     |
 | Stage-specific 工具 + schema               | C+A+K              | 5 个报告工具，各自 Zod schema `.strict()`                      |
 | `client.session.create()` + `prompt()`     | F                  | `createChild`                                                   |

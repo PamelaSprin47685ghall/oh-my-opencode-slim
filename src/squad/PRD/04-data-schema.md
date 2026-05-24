@@ -189,7 +189,7 @@ async function gateWait(sessionId: string, report: SquadReport): Promise<string>
     ctx.gate = { resolve };                                // 挂起等决议
   });
   
-  if (verdict.accepted) return 'Report accepted.';
+  if (verdict.accepted) return 'Report accepted. No further work is required.';
   
   ctx.nextReport = new Deferred<void>();  // 重置以接收下次报告
   return `Report rejected. Feedback:\n${verdict.feedback}\n\n...`;

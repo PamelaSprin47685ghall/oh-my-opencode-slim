@@ -44,7 +44,7 @@ REPORT_CALLED      ← child 调用阶段专属报告工具
             │
             ▼
 GATE_WAITING      ← gate boundary reached
-  ├─ ACCEPTED      ← gate resolve({ accepted: true }) → 返回 "Report accepted."
+  ├─ ACCEPTED      ← gate resolve({ accepted: true }) → 返回 "Report accepted. No further work is required."
   └─ REJECTED      ← gate resolve({ accepted: false, feedback }) → 返回反馈字符串
                       → nextReport 重置 → 回到 REPORT_CALLED
 
