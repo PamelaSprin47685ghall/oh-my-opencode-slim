@@ -68,7 +68,7 @@ SILENT_END
    报告工具。`nudgeCount++`。
 3. **重复检测**：nudge prompt 本身也有自己的 promptPromise，
    如果再次静默结束，再次 nudge。
-4. **兜底**：当 `nudgeCount >= maxNudges`（默认 3），不再继续 nudge，
+4. **兜底**：当 `nudgeCount >= maxNudges`（默认 20），不再继续 nudge，
    而是调用 `makeDefaultReport()` 生成一个符合 schema 的最小默认报告，
    写入 structuredStore，resolve nextReport，让流程继续。
 
@@ -101,7 +101,7 @@ SILENT_END
 - **DAG 死锁破缺**：`runNodeLoop` 检测到环依赖时抛出异常，不无限等待。
 - **DAG 中止**：当 `runtime.isAborted()` 为 true 时，DAG 调度器在执行前检查并抛出 `'Squad aborted'`。
 - **节点级中止**：`withReviewLoop` 每次循环开头检查 `runtime.isAborted()`，如果已中止则 gateAccept + cleanup + throw。
-- **nudge 兜底**：`awaitReportInternal` 通过 `Promise.race` 检测 `promptPromise` 先于 `nextReport` resolve，最多 nudge `maxNudges` 次（默认 3），之后生成 default report 继续流程（原理 N）。
+- **nudge 兜底**：`awaitReportInternal` 通过 `Promise.race` 检测 `promptPromise` 先于 `nextReport` resolve，最多 nudge `maxNudges` 次（默认 20），之后生成 default report 继续流程（原理 N）。
 - **nudge 耗尽时跳过审查**：当 `nudgeExhausted` 标志为 true 时，`withReviewLoop` 跳过审查直接接受默认报告。orchestrator 的全局计划内层循环同样检测此标志，跳过审查直接返回。因为子会话已死亡，审查拒绝后无法修正。
 
 ---

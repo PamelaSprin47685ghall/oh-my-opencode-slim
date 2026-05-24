@@ -34,8 +34,8 @@ describe('Deferred', () => {
 // ---------------------------------------------------------------------------
 
 describe('DEFAULT_NUDGE_CONFIG', () => {
-  test('has maxNudges of 3', () => {
-    expect(DEFAULT_NUDGE_CONFIG.maxNudges).toBe(3);
+  test('has maxNudges of 20', () => {
+    expect(DEFAULT_NUDGE_CONFIG.maxNudges).toBe(20);
   });
 });
 
