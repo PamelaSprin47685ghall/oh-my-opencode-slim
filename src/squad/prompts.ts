@@ -65,7 +65,7 @@ const PLAN_TEMPLATE_INSTRUCTION = `# 计划模板
 [可量化的验收标准。]`;
 
 export function renderGlobalPlanPrompt(intent: string): string {
-  return `${AUTO_MODE_HEADER}请分析并制定完美的计划。
+  return `${AUTO_MODE_HEADER}请分析并制定完美的计划。注意你不需要拆分 DAG，后续有专业的拆分。
 
 # 用户意图
 
@@ -109,6 +109,7 @@ ${REVIEW_VERDICT}`;
 
 export function renderDagDesignPrompt(planMarkdown: string): string {
   return `${AUTO_MODE_HEADER}基于以下计划设计一个 DAG，描述高度并行的工作流。
+注意：可以把设计 API 的节点前置，这样后续就可以在 API 两侧分别开发。
 
 # 计划内容
 
@@ -148,6 +149,7 @@ export function renderNodePlanPrompt(
   const edgeList = edges.map((e) => `- ${e.parent} → ${e.child}`).join('\n');
 
   return `${AUTO_MODE_HEADER}你所在的节点是 ${nodeName}，请根据以下全局计划，制定完美的本节点计划。
+注意：如果本节点用到其他节点的 API，需要实际读取后再制定计划。
 
 # 全局计划
 

@@ -12,7 +12,7 @@ import {
   ReviewSchema,
   type SquadReport,
 } from './schemas';
-import { Deferred, type GateVerdict, squadSessions } from './squad-context';
+import { type GateVerdict, squadSessions } from './squad-context';
 
 /**
  * Create the 5 stage-specific report tools for squad.
