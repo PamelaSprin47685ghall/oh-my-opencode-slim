@@ -107,14 +107,6 @@ export function createSquadCommandManager(ctx: PluginInput) {
       for (const childId of createdChildIds) {
         squadSessions.delete(childId);
         structuredStore.delete(childId);
-        try {
-          await ctx.client.session.abort({
-            path: { id: childId },
-            query: { directory },
-          });
-        } catch {
-          // Best-effort cleanup
-        }
       }
     }
   }

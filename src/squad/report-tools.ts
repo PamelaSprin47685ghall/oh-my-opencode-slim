@@ -77,9 +77,6 @@ async function gateWait(
     return 'Report accepted.';
   }
 
-  // Reject — reset nextReport for retry, return feedback
-  ctx.nextReport = new Deferred<void>();
-
   return `Report rejected. Feedback:\n${verdict.feedback}\n\nRevise and call the same report tool again.`;
 }
 

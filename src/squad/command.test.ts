@@ -87,9 +87,7 @@ describe('createSquadCommandManager', () => {
     });
 
     test('clears template and runs squad with user intent', async () => {
-      const abortMock = mock(() => {});
       const ctx = createMockContext();
-      ctx.client.session.abort = abortMock;
       const manager = createSquadCommandManager(ctx);
       const output = createOutput();
       output.parts.push({ type: 'text', text: 'Call the squad tool...' });
@@ -114,9 +112,7 @@ describe('createSquadCommandManager', () => {
     });
 
     test('produces output with marker on error path', async () => {
-      const abortMock = mock(() => {});
       const ctx = createMockContext();
-      ctx.client.session.abort = abortMock;
       const manager = createSquadCommandManager(ctx);
       const output = createOutput();
 
