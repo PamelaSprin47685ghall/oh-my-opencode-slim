@@ -106,6 +106,7 @@ function stageTools(
     tools.edit = false;
     tools.write = false;
     tools.task = false;
+    tools.subtask = false;
   }
 
   return tools;
