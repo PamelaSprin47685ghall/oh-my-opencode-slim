@@ -95,7 +95,7 @@ function stageTools(
       break;
   }
 
-  // Planner and reviewer stages disable bash (PRD §06: recursion mitigation)
+  // Planner and reviewer stages: read-only — no execution, no file mutation, no subagents
   if (
     stage === 'global_plan' ||
     stage === 'node_plan' ||
@@ -103,6 +103,9 @@ function stageTools(
     stage === 'review'
   ) {
     tools.bash = false;
+    tools.edit = false;
+    tools.write = false;
+    tools.task = false;
   }
 
   return tools;
