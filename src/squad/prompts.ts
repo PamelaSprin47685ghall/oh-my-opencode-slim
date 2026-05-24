@@ -87,7 +87,7 @@ export function renderGlobalReviewPrompt(
   size: string,
   planMarkdown: string,
 ): string {
-  return `${AUTO_MODE_HEADER}请对以下全局计划进行严苛的评审。
+  return `${AUTO_MODE_HEADER}请对以下全局计划进行严苛的评审。注意不需要拆分 DAG，后续有专业的拆分。
 
 ${PLAN_REVIEW_CRITERIA}
 6. 选择的规模是否合适？
