@@ -68,6 +68,7 @@ export function findCapsFiles(projectRoot: string): CapsFileInfo[] {
     }
   }
 
+  results.sort((a, b) => a.filePath.localeCompare(b.filePath));
   return results;
 }
 
