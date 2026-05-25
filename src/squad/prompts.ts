@@ -40,8 +40,6 @@ squad_node_exec({
 
 const PLAN_TEMPLATE_INSTRUCTION = `# 计划模板
 
-[每次计划都是独立成篇，不要出现“同前版”之类的表述。]
-
 **问题背景**
 
 [要解决什么问题？上下文和动机。]
@@ -287,11 +285,11 @@ ${AFFECTED_FILES_SUBMISSION}`;
 }
 
 export function renderPlanRejectionFeedback(feedbackMarkdown: string): string {
-  return `你制定的计划在执行前被评审拒绝。请重新制定更完善的计划。\n\n# 评审反馈\n\n${feedbackMarkdown}`;
+  return `你制定的计划在执行前被评审拒绝。请重新制定更完善的计划。注意新的计划独立成篇，不要出现“同前版”之类的表述，旧计划已删除。\n\n# 评审反馈\n\n${feedbackMarkdown}`;
 }
 
 export function renderExecRejectionFeedback(feedbackMarkdown: string): string {
-  return `你制定的计划执行后，评审拒绝结束整个任务。请以现在的状态为基准，重新制定走向最终目标的计划。\n\n# 执行评审反馈\n\n${feedbackMarkdown}`;
+  return `你制定的计划执行后，评审拒绝结束整个任务。请以现在的状态为基准，重新制定走向最终目标的计划。注意新的计划独立成篇，不要出现“同前版”之类的表述，旧计划已删除。\n\n# 执行评审反馈\n\n${feedbackMarkdown}`;
 }
 
 const STAGE_TOOL_MAP: Record<string, string> = {
