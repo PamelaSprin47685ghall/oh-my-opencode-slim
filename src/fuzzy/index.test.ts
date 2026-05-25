@@ -126,7 +126,9 @@ describe('buildQuery', () => {
 
 describe('formatGrepOutput', () => {
   it('returns no matches message for empty result', () => {
-    expect(formatGrepOutput({ items: [], totalMatched: 0 })).toBe('No matches found');
+    expect(formatGrepOutput({ items: [], totalMatched: 0 })).toBe(
+      'No matches found',
+    );
   });
 
   it('formats grep matches grouped by file', () => {
@@ -184,7 +186,11 @@ describe('formatGrepOutput', () => {
 
 describe('formatFindOutput', () => {
   it('returns no files message for empty result', () => {
-    const result = formatFindOutput({ items: [], scores: [], totalMatched: 0 }, null, 'test');
+    const result = formatFindOutput(
+      { items: [], scores: [], totalMatched: 0 },
+      null,
+      'test',
+    );
     expect(result.output).toBe('No files found matching pattern');
     expect(result.weak).toBe(false);
     expect(result.totalMatched).toBe(0);

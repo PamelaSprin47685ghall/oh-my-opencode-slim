@@ -46,7 +46,10 @@ export function formatGrepOutput(
   try {
     if (!result?.items?.length) return 'No matches found';
     const totalMatched = result.totalMatched ?? result.items.length;
-    const lines: string[] = [`${totalMatched} match${totalMatched === 1 ? '' : 'es'}`, ''];
+    const lines: string[] = [
+      `${totalMatched} match${totalMatched === 1 ? '' : 'es'}`,
+      '',
+    ];
     let currentFile = '';
     for (const match of result.items) {
       if (!match) continue;

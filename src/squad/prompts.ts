@@ -40,6 +40,8 @@ squad_node_exec({
 
 const PLAN_TEMPLATE_INSTRUCTION = `# 计划模板
 
+[每次计划都是独立成篇，不要出现“同前版”之类的表述。]
+
 **问题背景**
 
 [要解决什么问题？上下文和动机。]

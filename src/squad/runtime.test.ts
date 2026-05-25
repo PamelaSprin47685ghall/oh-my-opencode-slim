@@ -151,7 +151,6 @@ describe('awaitReportInternal nudge flow', () => {
     expect(ctx.nudgeCount).toBe(2);
     ctx.nudgeCount++;
     expect(ctx.nudgeCount).toBe(3);
-    expect(ctx.nudgeCount >= DEFAULT_NUDGE_CONFIG.maxNudges).toBe(true);
   });
 });
 

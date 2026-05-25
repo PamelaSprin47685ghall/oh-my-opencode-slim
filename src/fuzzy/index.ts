@@ -345,7 +345,11 @@ export function createFuzzyGrepTool(): ToolDefinition {
         }
 
         let isGrepGlobalTruncated = false;
-        if (effectiveLimit !== null && result?.items && result.items.length > effectiveLimit) {
+        if (
+          effectiveLimit !== null &&
+          result?.items &&
+          result.items.length > effectiveLimit
+        ) {
           result = {
             ...result,
             items: result.items.slice(0, effectiveLimit),

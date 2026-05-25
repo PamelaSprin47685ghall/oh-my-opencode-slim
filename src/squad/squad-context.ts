@@ -33,12 +33,12 @@ export type GateVerdict =
 
 /** Nudge configuration for squad child sessions. */
 export interface NudgeConfig {
-/** Maximum number of nudges before giving up and using a default report. Default: 20. */
+  /** Maximum number of nudges before giving up and using a default report. Default: 20. */
   maxNudges: number;
-  }
- 
-  /** Default nudge configuration. */
-  export const DEFAULT_NUDGE_CONFIG: NudgeConfig = {
+}
+
+/** Default nudge configuration. */
+export const DEFAULT_NUDGE_CONFIG: NudgeConfig = {
   maxNudges: 20,
 };
 
