@@ -69,7 +69,9 @@ describe('createSquadCommandManager', () => {
     });
 
     test('returns usage hint when no arguments provided', async () => {
-      const manager = createSquadCommandManager(createMockContext());
+      const mockCtx = createMockContext();
+      mockCtx.directory = '/nonexistent-empty-dir';
+      const manager = createSquadCommandManager(mockCtx);
       const output = createOutput();
       output.parts.push({ type: 'text', text: 'template content' });
 

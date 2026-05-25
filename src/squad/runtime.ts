@@ -29,11 +29,23 @@ export interface SquadDeps {
   structuredStore: Map<string, SquadReport>;
   createdChildIds: Set<string>;
   abortSignal?: AbortSignal;
+  onSnapshot?: (
+    event:
+      | 'child_created'
+      | 'child_cleanup'
+      | 'gate_accepted'
+      | 'gate_rejected',
+    stage: SquadStage,
+    childSessionId: string,
+    report?: SquadReport,
+    feedback?: string,
+  ) => void;
 }
 
 export interface SquadRuntime {
   workspaceId: string;
   cwd: string;
+  onSnapshot?: SquadDeps['onSnapshot'];
   isAborted: () => boolean;
   isNudgeExhausted: (childId: string) => boolean;
   createChild: (params: StageExecutionParams) => Promise<string>;
@@ -258,6 +270,15 @@ export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
     children.set(childSessionId, ctx);
     deps.createdChildIds.add(childSessionId);
 
+    if (deps.onSnapshot) {
+      try {
+        deps.onSnapshot('child_created', params.stage, childSessionId);
+      } catch (_e) {
+        // ignore
+      }
+    }
+
+    // Fire prompt — do NOT await it; the child runs in the background.
     // Fire prompt — do NOT await it; the child runs in the background.
     // The gate mechanism (nextReport + gate) is our synchronization point.
     // startTrackedPrompt sets up an independent completion promise so
@@ -415,6 +436,13 @@ export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
     if (ctx) {
       ctx.disposed = true;
       ctx.gate?.resolve({ accepted: true }); // G: release gate
+      if (deps.onSnapshot) {
+        try {
+          deps.onSnapshot('child_cleanup', ctx.stage, childId);
+        } catch (_e) {
+          // ignore
+        }
+      }
     }
 
     // Remove from global registry first so orphan sessions fail closed
@@ -455,10 +483,31 @@ export function createSquadRuntime(deps: SquadDeps): SquadRuntime {
     gateAccept: (childId) => {
       const ctx = children.get(childId);
       if (ctx) ctx.gate?.resolve({ accepted: true });
+      if (deps.onSnapshot && ctx) {
+        try {
+          const report = deps.structuredStore.get(childId);
+          deps.onSnapshot('gate_accepted', ctx.stage, childId, report);
+        } catch (_e) {
+          // ignore
+        }
+      }
     },
     gateReject: (childId, feedback) => {
       const ctx = children.get(childId);
       if (ctx) ctx.gate?.resolve({ accepted: false, feedback });
+      if (deps.onSnapshot && ctx) {
+        try {
+          deps.onSnapshot(
+            'gate_rejected',
+            ctx.stage,
+            childId,
+            undefined,
+            feedback,
+          );
+        } catch (_e) {
+          // ignore
+        }
+      }
     },
     cleanupChild: cleanupChildInternal,
     cleanupAll: cleanupAllInternal,

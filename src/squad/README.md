@@ -55,10 +55,13 @@ src/addons/squad/
 ├── path-l.ts                DAG 执行
 ├── dag-scheduler.ts         自驱动 DAG 调度器
 ├── node-executor.ts         单节点 withReviewLoop
+├── state.ts                 状态持久化
+├── resume.ts                断点恢复
 ├── prompts.ts               prompt 模板 + rejection feedback
 ├── schemas.ts               Zod schema + schemaForStage + describeSchema
 ├── report-renderer.ts       renderMarkdown + getTitle
 ├── context-registry.test.ts 单元测试
+├── persistence.test.ts      持久化单元测试
 ├── PRD/                     设计文档
 └── README.md                本文
 ```

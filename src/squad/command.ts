@@ -6,8 +6,10 @@ import {
   renderFailedResult,
   renderSquadResult,
 } from './report-renderer';
+import { getResumeState } from './resume';
 import type { SquadReport } from './schemas';
 import { squadSessions } from './squad-context';
+import { listCheckpoints } from './state';
 
 const COMMAND_NAME = 'squad';
 
@@ -58,14 +60,46 @@ export function createSquadCommandManager(ctx: PluginInput) {
     // Clear the template so OpenCode doesn't send it to the LLM
     output.parts.length = 0;
 
-    const intent = input.arguments.trim();
-    if (!intent) {
-      output.parts.push(
-        createInternalAgentTextPart(
-          'Please provide a task description after /squad.\nExample: /squad Refactor the auth module to use JWT',
-        ),
-      );
+    const args = input.arguments.trim();
+    if (!args) {
+      const checkpoints = listCheckpoints(ctx.directory);
+      if (checkpoints.length === 0) {
+        output.parts.push(
+          createInternalAgentTextPart(
+            'Please provide a task description after /squad.\nExample: /squad Refactor the auth module to use JWT',
+          ),
+        );
+        return;
+      }
+
+      let text = 'Available squad checkpoints:\n';
+      checkpoints.forEach((c, i) => {
+        const stepInfo =
+          c.totalNodes > 0
+            ? `, ${c.completedNodes}/${c.totalNodes} nodes done`
+            : '';
+        text += `${i + 1}. ${c.timestamp} — ${c.intent} (${c.size || 'unknown'}, ${c.status}${stepInfo})\n   ➜ /squad resume ${c.timestamp}\n`;
+      });
+      output.parts.push(createInternalAgentTextPart(text));
       return;
+    }
+
+    let intent = args;
+    let resumeState: ReturnType<typeof getResumeState> | undefined;
+
+    if (args.startsWith('resume ')) {
+      const timestamp = args.slice(7).trim();
+      const loadedState = getResumeState(ctx.directory, timestamp);
+      if (!loadedState) {
+        output.parts.push(
+          createInternalAgentTextPart(
+            `Error: Squad checkpoint not found or already completed/cancelled: "${timestamp}"`,
+          ),
+        );
+        return;
+      }
+      resumeState = loadedState;
+      intent = resumeState.meta.intent;
     }
 
     const parentSessionId = input.sessionID;
@@ -82,6 +116,7 @@ export function createSquadCommandManager(ctx: PluginInput) {
         structuredStore,
         createdChildIds,
         intent,
+        resumeState,
       });
 
       if (result.status === 'cancelled') {

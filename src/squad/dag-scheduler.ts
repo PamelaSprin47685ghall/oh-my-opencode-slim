@@ -1,6 +1,8 @@
 import { executeSingleNode, type NodeParams } from './node-executor';
+import type { ResumeState } from './resume';
 import type { SquadRuntime } from './runtime';
 import type { NodeExecReport } from './schemas';
+import { type NodeResultState, saveNodes } from './state';
 
 export interface NodeLoopParams {
   nodes: Array<{ name: string }>;
@@ -18,9 +20,13 @@ export interface NodeResult {
 export async function runNodeLoop(
   params: NodeLoopParams,
   runtime: SquadRuntime,
+  resumeState?: ResumeState,
 ): Promise<NodeResult[]> {
   const inDegree = new Map<string, number>();
   const dependents = new Map<string, string[]>();
+
+  // Determine timestamp to use for serialization
+  const timestamp = resumeState?.timestamp || new Date().toISOString();
 
   for (const node of params.nodes) {
     inDegree.set(node.name, 0);
@@ -44,6 +50,27 @@ export async function runNodeLoop(
   }
 
   const completed = new Map<string, NodeExecReport>();
+
+  // Pre-load completed nodes from resumeState
+  if (resumeState?.nodes?.nodes) {
+    for (const completedNode of resumeState.nodes.nodes) {
+      if (completedNode.status === 'completed') {
+        completed.set(completedNode.name, {
+          kind: 'node_exec',
+          childTaskId: '',
+          reportMarkdown: completedNode.reportMarkdown,
+          affectedFiles: completedNode.affectedFiles,
+        });
+
+        // Update in-degrees for pre-loaded completed nodes
+        inDegree.set(completedNode.name, -1);
+        for (const dep of dependents.get(completedNode.name) ?? []) {
+          inDegree.set(dep, (inDegree.get(dep) ?? 0) - 1);
+        }
+      }
+    }
+  }
+
   const dagAbort = new AbortController();
 
   const promise = new Promise<NodeResult[]>((resolve, reject) => {
@@ -101,6 +128,26 @@ export async function runNodeLoop(
 
         const report = await executeSingleNode(nodeParams, runtime);
         completed.set(name, report);
+
+        // Serialize execution results
+        const nodesList: NodeResultState[] = params.nodes.map((n) => {
+          const compReport = completed.get(n.name);
+          if (compReport) {
+            return {
+              name: n.name,
+              status: 'completed',
+              reportMarkdown: compReport.reportMarkdown,
+              affectedFiles: compReport.affectedFiles,
+            };
+          }
+          return {
+            name: n.name,
+            status: 'pending',
+            reportMarkdown: '',
+            affectedFiles: [],
+          };
+        });
+        saveNodes(runtime.cwd, timestamp, { nodes: nodesList });
 
         for (const dep of dependents.get(name) ?? []) {
           inDegree.set(dep, (inDegree.get(dep) ?? 0) - 1);
