@@ -85,7 +85,9 @@ export function createSquadCommandManager(ctx: PluginInput) {
     }
 
     let intent = args;
-    let resumeState: ReturnType<typeof getResumeState> | undefined;
+    let resumeState:
+      | Exclude<ReturnType<typeof getResumeState>, null>
+      | undefined;
 
     if (args.startsWith('resume ')) {
       const timestamp = args.slice(7).trim();
